@@ -14,7 +14,7 @@ func NewEntry(dec Decoder, data []byte) *Entry {
 		Recipient: dec,
 		Data: data,
 		EphemSecret: nil,
-		HeaderPosition: nil,
+		HeaderPosition: -1,
 	}
 }
 
