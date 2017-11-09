@@ -40,15 +40,15 @@ type Decoder struct {
 
 //Entry holds the info required to create an entrypoint for each recipient.
 type Entry struct {
-	Recipient      Decoder        // Recipient whom this entrypoint is for
-	Data           []byte         // Entrypoint data decryptable by recipient
-	EphemSecret    abstract.Point // Ephemeral secret used to encrypt the entry point
-	HeaderPosition int            // Position of the entrypoint in the header of a purb
+	Recipient      Decoder // Recipient whom this entrypoint is for
+	Data           []byte  // Entrypoint data decryptable by recipient
+	EphemSecret    []byte  // Ephemeral secret derived from negotiated DH secret
+	HeaderPosition int     // Position of the entrypoint in the header of a purb
 }
 
 // Structure defining the actual header of a purb
 type Header struct {
-	Entries     []*Entry                    // List of entrypoints
-	SuiteToKeys map[string]*suiteKey // Holds ephemeral keys for each suite in the header
-	buf         []byte                      // Buffer in which to build message
+	Entries     []*Entry             // List of entrypoints
+	SuiteToKeys map[string]*suiteKey // Holds sender's ephemeral private/public keys for each suite in the header
+	buf         []byte               // Buffer in which to build message
 }

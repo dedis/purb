@@ -6,15 +6,28 @@ import (
 	"gopkg.in/dedis/crypto.v0/cipher"
 	"log"
 	"errors"
+	"golang.org/x/crypto/pbkdf2"
+	"crypto/sha256"
 )
 
 // New entrypoint for a given recipient.
 func NewEntry(dec Decoder, data []byte) *Entry {
 	return &Entry{
-		Recipient: dec,
-		Data: data,
-		EphemSecret: nil,
+		Recipient:      dec,
+		Data:           data,
+		EphemSecret:    nil,
 		HeaderPosition: -1,
+	}
+}
+
+// New empty Header with initialized maps.
+func NewHeader() *Header {
+	b := make([]byte, 0)
+	s2k := make(map[string]*suiteKey)
+	return &Header{
+		Entries:     nil,
+		SuiteToKeys: s2k,
+		buf:         b,
 	}
 }
 
@@ -28,6 +41,7 @@ func (h *Header) GenSuiteKeys(rand cipher.Stream) error {
 		var rep []byte
 		if _, ok := h.SuiteToKeys[e.Recipient.Suite.String()]; !ok {
 			for correct := false; correct != true; {
+				// Generate a fresh private key (scalar) and compute a public key (point)
 				priv = e.Recipient.Suite.NewKey(rand)
 				pub = e.Recipient.Suite.Point().Mul(nil, priv)
 				rep = pub.(abstract.Hiding).HideEncode(rand)
@@ -52,12 +66,22 @@ func (h *Header) ComputeEphemSecrets(rand cipher.Stream) error {
 	for _, e := range h.Entries {
 		skey, ok := h.SuiteToKeys[e.Recipient.Suite.String()]
 		if ok {
-			e.EphemSecret = e.Recipient.Suite.Point().Mul(e.Recipient.PublicKey, skey.dhpri)
+			sharedKey := e.Recipient.Suite.Point().Mul(e.Recipient.PublicKey, skey.dhpri) // Compute shared DH key
+			if sharedKey != nil {
+				sharedBytes, _ := sharedKey.MarshalBinary()
+				e.EphemSecret = KDF(sharedBytes) // Derive a key using KDF
+			} else {
+				return errors.New("couldn't negotiate a shared DH key")
+			}
 		} else {
 			return errors.New("no freshly generated private key exists for this ciphersuite")
 		}
 	}
 	return nil
+}
+
+func KDF(password []byte) []byte {
+	return pbkdf2.Key(password, nil, 1, 32, sha256.New)
 }
 
 func (e *Entry) String() string {
