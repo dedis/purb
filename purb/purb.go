@@ -1,7 +1,6 @@
 package purb
 
 import (
-	"gopkg.in/dedis/crypto.v0/abstract"
 	"gopkg.in/dedis/crypto.v0/cipher"
 	"errors"
 	"golang.org/x/crypto/pbkdf2"
@@ -10,14 +9,16 @@ import (
 	"log"
 	"gopkg.in/dedis/crypto.v0/random"
 	"gopkg.in/dedis/crypto.v0/cipher/aes"
-	"github.com/nikirill/crypto/purb"
+	"gopkg.in/dedis/crypto.v0/config"
+	"gopkg.in/dedis/crypto.v0/abstract"
 )
 
 //Length each cornerstone value has (for simplicity assuming all suites HideLen is the same).
 const KEYLEN = 32
 
-//Length of an entrypoint including AEAD key and metadata. For simplicity assume to be equal to KEYLEN
-const ENTRYLEN = KEYLEN
+//Length of an entrypoint including encrypted key and location of payload start (16+8 bytes),
+//and an authentication tag (16 bytes).
+const ENTRYLEN = 40
 
 //Change this value to see if it can give nicer numbers
 //--Trade off between header size and decryption time.
@@ -37,18 +38,18 @@ func NewEntry(dec Decoder, data []byte) *Entry {
 }
 
 // New empty Header with initialized maps.
-func NewEmptyHeader() Header {
+func NewEmptyHeader() *Header {
 	s2k := make(map[string]*Cornerstone)
-	return Header{
+	return &Header{
 		Entries:             nil,
 		SuitesToCornerstone: s2k,
 		layout:              nil,
 	}
 }
 
-func NewPurb(he Header, payload []byte) *Purb {
+func NewPurb(head *Header, payload []byte) *Purb {
 	return &Purb{
-		Header: he,
+		Header: head,
 		Payload: payload,
 		EncPayloads: make([]EncPayload, 0),
 		//buf: make([]byte, 0),
@@ -60,24 +61,24 @@ func NewPurb(he Header, payload []byte) *Purb {
 // them to corresponding entry points
 func (h *Header) GenCornerstones(rand cipher.Stream) error {
 	for _, e := range h.Entries {
-		var dhpriv abstract.Scalar
-		var dhpub abstract.Point
-		var dhellpub []byte
+		var pair *config.KeyPair
+		var encode []byte
 		if _, ok := h.SuitesToCornerstone[e.Recipient.Suite.String()]; !ok {
 			for {
-				// Generate a fresh private key (scalar) and compute a public key (point)
-				dhpriv = e.Recipient.Suite.NewKey(rand)
-				dhpub = e.Recipient.Suite.Point().Mul(nil, dhpriv)
-				dhellpub = dhpub.(abstract.Hiding).HideEncode(rand)
-				if dhpriv != nil && dhpub != nil {
-					if dhellpub != nil {
+				// Generate a fresh key pair of a  sprivate key (scalar) and a public key (point)
+				pair = config.NewKeyPair(e.Recipient.Suite)
+				encode = pair.Public.(abstract.Hiding).HideEncode(rand)
+				if pair.Secret != nil && pair.Public != nil {
+					if encode != nil {
 						break
 					}
 				} else {
 					return errors.New("generated private or public keys were nil")
 				}
 			}
-			h.SuitesToCornerstone[e.Recipient.Suite.String()] = &Cornerstone{priv: dhpriv, pub: dhpub, ellpub: dhellpub,}
+			padpub := append(encode, random.Bytes(ENTRYLEN - len(encode), rand)...)
+			//log.Printf("Length of encoded and padded public key for suite %s is: %d", e.Recipient.Suite.String(), len(padpub))
+			h.SuitesToCornerstone[e.Recipient.Suite.String()] = &Cornerstone{priv: pair.Secret, pub: pair.Public, encoded: padpub,}
 		}
 	}
 	return nil
@@ -104,30 +105,26 @@ func (h *Header) ComputeSharedSecrets() error {
 	return nil
 }
 
+// Create necessary number of hash tables for the layout of the header.
+// Number of entries is rounded up to the nearest power of 2 to (the number of cornerstones
+// + the number of entrypoints).
 func (h *Header) GenHashTables() {
-	// Create necessary number of hash tables.
-	// Rounded up to the nearest power of 2 to (the number of cornerstones + the number of entrypoints).
 	var headerEntries int
 	dataValues := len(h.SuitesToCornerstone) + len(h.Entries)
 	for i := 0; headerEntries < dataValues; i++ {
 		headerEntries += int(math.Pow(2, float64(i)))
 	}
 	h.layout = make([][]byte, headerEntries)
-
-	//numOfTables := math.Ceil(math.Log2(float64(len(h.SuitesToCornerstone) + len(h.Entries)))) + 1
-	//h.layout = make([]map[int][]byte, numOfTables)
-	//for i:=0; i<numOfTables; i++ {
-	//	h.layout[i] = make(map[int][]byte, int(math.Pow(2, float64(i))))
-	//}
 }
 
+// Writes cornerstone values to the first available entries of the ones assigned for use ciphersuites
 func (h *Header) WriteCornerstones(suiteInfo SuiteInfoMap) error {
 		for suite, key := range h.SuitesToCornerstone { // for each cornerstone
 			info := suiteInfo[suite]
 			if info != nil {
 				for _, bytepos := range info.Positions {
 					if h.layout[bytepos/KEYLEN] == nil {
-						h.layout[bytepos/KEYLEN] = key.ellpub
+						h.layout[bytepos/KEYLEN] = key.encoded
 						continue
 					}
 				}
@@ -141,6 +138,9 @@ func (h *Header) WriteCornerstones(suiteInfo SuiteInfoMap) error {
 }
 
 func (h *Header) WriteEntrypoints() error {
+	//for _, entry := range h.Entries {
+	//
+	//}
 	return nil
 }
 
@@ -172,6 +172,8 @@ func (h *Header) Write(rand cipher.Stream) []byte {
 	return nil
 }
 
+// Encrypt the payload of the purb using freshly generated symmetric keys and AEAD.
+// Payload is encrypted as many times as there are distinct cornerstone values (corresponding cipher suites used).
 func (p *Purb) EncryptPayload(rand cipher.Stream) {
 	for suite := range p.Header.SuitesToCornerstone {
 		// Generate a random 16-byte key and create a cipher from it

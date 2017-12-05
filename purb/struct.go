@@ -14,9 +14,9 @@ type SuiteInfo struct {
 // Ephemeral Diffie-Hellman keys for all key-holders using this suite.
 // Should have a uniform representation, e.g., an Elligator point.
 type Cornerstone struct {
-	priv   abstract.Scalar
-	pub    abstract.Point
-	ellpub []byte
+	priv    abstract.Scalar
+	pub     abstract.Point
+	encoded []byte
 }
 
 // Decoder holds information needed to be able to encrypt anything for it
@@ -43,7 +43,7 @@ type Header struct {
 
 // Structure to define the whole PURB
 type Purb struct {
-	Header      Header
+	Header      *Header
 	Payload     []byte
 	EncPayloads []EncPayload // A list of encrypted payloads and corresponding keys
 }
