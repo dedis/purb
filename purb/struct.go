@@ -14,9 +14,10 @@ type SuiteInfo struct {
 // Ephemeral Diffie-Hellman keys for all key-holders using this suite.
 // Should have a uniform representation, e.g., an Elligator point.
 type Cornerstone struct {
-	priv    abstract.Scalar
-	pub     abstract.Point
-	encoded []byte
+	Priv    abstract.Scalar
+	Pub     abstract.Point
+	Encoded []byte // Elligator Encoded public key
+	Nonce   []byte // Nonce used in AEAD of entrypoints. The same for different entrypoints as keys are different
 }
 
 // Decoder holds information needed to be able to encrypt anything for it
@@ -37,8 +38,8 @@ type Entry struct {
 type Header struct {
 	Entries             []*Entry                // List of entrypoints
 	SuitesToCornerstone map[string]*Cornerstone // Holds sender's ephemeral private/public keys for each suite in the header
-	layout              [][]byte                // An array of byte slices where each of the bytes slice represents a hash table entry
-	//layout      []map[int][]byte     // An array of maps where each of the maps represents a hash table and the keys are 0, 1, ... , 2^N
+	Layout              [][]byte                // An array of byte slices where each of the bytes slice represents a hash table entry
+	//Layout      []map[int][]byte     // An array of maps where each of the maps represents a hash table and the keys are 0, 1, ... , 2^N
 }
 
 // Structure to define the whole PURB

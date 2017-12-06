@@ -39,19 +39,19 @@ func TestHeader_GenCornerstones(t *testing.T) {
 	}
 	h.GenCornerstones(random.Stream)
 	for _, stone := range h.SuitesToCornerstone {
-		require.Equal(t, len(stone.encoded), 40)
-		require.NotEqual(t, stone.priv, nil)
-		require.NotEqual(t, stone.pub, nil)
+		require.Equal(t, len(stone.Encoded), 40)
+		require.NotEqual(t, stone.Priv, nil)
+		require.NotEqual(t, stone.Pub, nil)
 	}
 }
 
 func createInfo() *SuiteInfoMap {
 	info := make(SuiteInfoMap)
 	info[edwards.NewAES128SHA256Ed25519(true).String()] = &SuiteInfo{
-		Positions: []int{0, 32, 96},
+		Positions: []int{0, 36, 108},
 		KeyLen:    KEYLEN,}
 	//info[ed25519.NewAES128SHA256Ed25519(true).String()] = &SuiteInfo{
-	//	Positions: []int{0, 32, 128},
+	//	Positions: []int{0, 36, 144},
 	//	KeyLen:    KEYLEN,}
 	return &info
 }
