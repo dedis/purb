@@ -26,8 +26,8 @@ func TestPurb_EncryptPayload(t *testing.T) {
 	//p.Header.SuitesToCornerstone[ed25519.NewAES128SHA256Ed25519(true).String()] = &Cornerstone{}
 	p.EncryptPayload(random.Stream)
 	fmt.Println("Text length: ", len(payload))
-	fmt.Printf("Suite: %s \n Key: %s \n Content: %s \n Size: %d \n", p.EncPayloads[0].Suite,
-		hex.EncodeToString(p.EncPayloads[0].Key), hex.EncodeToString(p.EncPayloads[0].Content), p.EncPayloads[0].Size)
+	fmt.Printf("Key: %s \n Content: %s \n Size: %d \n",
+		hex.EncodeToString(p.Payload.Key), hex.EncodeToString(p.Payload.Content), p.Payload.Size)
 }
 
 func TestHeader_GenCornerstones(t *testing.T) {
@@ -48,10 +48,10 @@ func TestHeader_GenCornerstones(t *testing.T) {
 func createInfo() *SuiteInfoMap {
 	info := make(SuiteInfoMap)
 	info[edwards.NewAES128SHA256Ed25519(true).String()] = &SuiteInfo{
-		Positions: []int{0, 36, 108},
+		Positions: []int{0, 40, 120},
 		KeyLen:    KEYLEN,}
 	//info[ed25519.NewAES128SHA256Ed25519(true).String()] = &SuiteInfo{
-	//	Positions: []int{0, 36, 144},
+	//	Positions: []int{0, 40, 160},
 	//	KeyLen:    KEYLEN,}
 	return &info
 }
