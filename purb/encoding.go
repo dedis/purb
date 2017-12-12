@@ -12,7 +12,6 @@ import (
 	"gopkg.in/dedis/crypto.v0/abstract"
 	"encoding/binary"
 	"crypto/aes"
-	"github.com/nikirill/purbs/padding"
 )
 
 // Cornerstone - 40 bytes
@@ -50,21 +49,20 @@ const AUTH_TAG_LEGTH = SYMKEYLEN
 const ENTRYLEN = SYMKEYLEN + OFFSET_POINTER_SIZE + AUTH_TAG_LEGTH
 
 // Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
-const PLACEMENT_MARGIN = 1
+const PLACEMENT_MARGIN = 2
 
 func MakePurb(data []byte, decoders []Decoder, si SuiteInfoMap, stream cipher.Stream) ([]byte, error) {
-	var purb *Purb
 	// Generate payload key and global nonce. It could be passed by an application above
 	key := random.Bytes(KEYLEN, stream)
 	nonce := random.Bytes(NONCE_SIZE, stream)
-	purb = NewPurb(key, nonce)
-	purb.GenerateHeader(decoders, si, stream)
+	purb, err := NewPurb(key, nonce)
+	if err != nil {
+		log.Panic(err.Error())
+	}
+	purb.ConstructHeader(decoders, si, stream)
 
 	//encPayload, err := AEADEncrypt(data, purb.Nonce, purb.key,nil, stream)
 	//if err != nil {
-	//	panic(err)
-	//}
-	//if err := purb.FillEntrypoints(stream); err != nil {
 	//	panic(err)
 	//}
 	//purb.Write()
@@ -73,7 +71,7 @@ func MakePurb(data []byte, decoders []Decoder, si SuiteInfoMap, stream cipher.St
 	return nil, nil
 }
 
-func (p *Purb) GenerateHeader(decoders []Decoder, info SuiteInfoMap, stream cipher.Stream) {
+func (p *Purb) ConstructHeader(decoders []Decoder, info SuiteInfoMap, stream cipher.Stream) {
 	h := NewEmptyHeader()
 	// Add recipients to the header
 	for _, d := range decoders {
@@ -86,11 +84,14 @@ func (p *Purb) GenerateHeader(decoders []Decoder, info SuiteInfoMap, stream ciph
 		panic(err)
 	}
 	h.GenHashTables()
-	if err := h.LocateCornerstones(info); err != nil {
+	if err := h.LocateCornerstones(info, stream); err != nil {
+		panic(err)
+	}
+	if err := h.FillEntrypoints(p.key, p.Nonce, stream); err != nil {
 		panic(err)
 	}
 
-
+	p.Header = h
 }
 
 // Find what unique suits Decoders of the message use,
@@ -102,7 +103,7 @@ func (h *Header) GenCornerstones(stream cipher.Stream) error {
 		var encode []byte
 		if _, ok := h.SuitesToCornerstone[e.Recipient.Suite.String()]; !ok {
 			for {
-				// Generate a fresh key pair of a  sprivate key (scalar) and a public key (point)
+				// Generate a fresh key pair of a private key (scalar) and a public key (point)
 				pair = config.NewKeyPair(e.Recipient.Suite)
 				encode = pair.Public.(abstract.Hiding).HideEncode(stream)
 				if pair.Secret != nil && pair.Public != nil {
@@ -152,28 +153,99 @@ func (h *Header) ComputeSharedSecrets() error {
 // + the number of entrypoints).
 func (h *Header) GenHashTables() {
 	var headerEntries int
-	dataValues := len(h.SuitesToCornerstone) + len(h.Entries)
-	for i := 0; headerEntries < dataValues; i++ {
-		headerEntries += int(math.Pow(2, float64(i)))
-	}
+	power := math.Logb(float64(len(h.SuitesToCornerstone) + len(h.Entries)))
+	headerEntries = int(math.Pow(2, float64(power)+1)) - 1
 	h.Layout = make([][]byte, headerEntries)
 }
 
 // Writes cornerstone values to the first available entries of the ones assigned for use ciphersuites
-func (h *Header) LocateCornerstones(suiteInfo SuiteInfoMap) error {
+func (h *Header) LocateCornerstones(suiteInfo SuiteInfoMap, stream cipher.Stream) error {
 	for suite, key := range h.SuitesToCornerstone { // for each cornerstone
+		var buf []byte
 		info := suiteInfo[suite]
 		if info != nil {
 			for _, bytepos := range info.Positions {
 				if h.Layout[bytepos/ENTRYLEN] == nil {
-					h.Layout[bytepos/ENTRYLEN] = key.Encoded
-					continue
+					// Padding the key so the string length equals the entry length
+					buf = key.Encoded
+					buf = append(buf, random.Bytes(ENTRYLEN-KEYLEN, stream)...)
+					h.Layout[bytepos/ENTRYLEN] = buf
+					//log.Printf("Cornestone written to the entry is %x\n", buf)
+					break
 				}
 			}
-			log.Println("Could not find a position for cornerstone of suite ", suite)
-			return errors.New("could not find a free position for a cornerstone")
+			if buf == nil {
+				return errors.New("could not find a free position for a cornerstone")
+			}
 		} else {
 			return errors.New("we do not have info about the needed suite ")
+		}
+	}
+	return nil
+}
+
+// Encrypt the payload key and offset_start info for each recipient and creates corresponding entrypoints.
+// The position of an entrypoint is defined by hashing the shared secret and computing modulo table size.
+func (h *Header) FillEntrypoints(datakey []byte, gnonce []byte, stream cipher.Stream) error {
+	// Find and save a starting position of the payload
+	offset := make([]byte, OFFSET_POINTER_SIZE)
+	binary.BigEndian.PutUint32(offset, NONCE_SIZE+h.Size())
+	attemptCounter := 0
+	enoughTables := true
+	for !enoughTables {
+		for _, entry := range h.Entries {
+			var enc []byte
+			// Prepare data to place in
+			buf := datakey
+			buf = append(buf, offset...)
+			enc, err := AEADEncrypt(buf, gnonce, entry.SharedSecret, nil, stream)
+			if err != nil {
+				return err
+			}
+			if len(enc) != ENTRYLEN {
+				return errors.New("incorrect length of the encrypted entrypoint")
+			}
+
+			// Find a suitable position and write the entrypoint
+			hash := sha256.New()
+			hash.Write(entry.SharedSecret)
+			absPos := int(binary.BigEndian.Uint32(hash.Sum(nil))) // Large number to become a position
+			var tableOffset = 0
+			for i := 0; true; i++ {
+				tableSize := int(math.Pow(2, float64(i)))
+				pos := absPos % tableSize
+				if tableOffset+pos > len(h.Layout)-1 {
+					enoughTables = false
+					break
+				}
+				for j := 0; j <= PLACEMENT_MARGIN; j++ {
+					if h.Layout[tableOffset+pos] == nil {
+						h.Layout[tableOffset+pos] = enc
+						break
+					} else {
+						pos = (pos + 1) % tableSize
+					}
+				}
+				// Updating where the current table starts
+				tableOffset += tableSize
+			}
+			if enoughTables == false {
+				// We try to grow the layout twice if there is not space. If it doesn't help, then panic
+				if attemptCounter += 1; attemptCounter < 2 {
+					addition := make([][]byte, len(h.Layout)+1)
+					h.Layout = append(h.Layout, addition...)
+					break
+				} else {
+					panic("we ran out of hash tables and did not find a suitable position")
+					return errors.New("couldn't find a place for an entrypoint")
+				}
+			}
+		}
+	}
+	// Fill empty unused entries with random bits
+	for i, cell := range h.Layout {
+		if cell == nil {
+			h.Layout[i] = random.Bytes(ENTRYLEN, stream)
 		}
 	}
 	return nil
@@ -204,86 +276,6 @@ func AEADEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]b
 	return enc, nil
 }
 
-// Encrypt payload keys and offset_start info for each recipient and creates corresponding entrypoints.
-// The position of an entrypoint is defined by hashing the shared secret and computing modulo table size.
-func (p *Purb) FillEntrypoints(stream cipher.Stream) error {
-	for _, entry := range p.Header.Entries {
-		var enc []byte
-		// Prepare data to place in
-		buf := entry.SharedSecret
-		// Find and save a starting position of corresponding payload
-		var offset, paysize uint32 = 0, 0
-		for _, payload := range p.EncPayloads {
-			if entry.Recipient.Suite.String() == payload.Suite {
-				paysize = payload.Size
-				break
-			} else {
-				offset += payload.Size
-			}
-		}
-		offset += p.Header.Size()
-		temp := make([]byte, OFFSET_POINTER_SIZE)
-		binary.BigEndian.PutUint32(temp, offset)
-		buf = append(buf, temp...)
-		if paysize != 0 {
-			binary.BigEndian.PutUint32(temp, paysize)
-			buf = append(buf, temp...)
-		} else {
-			return errors.New("payload size turns out to be 0")
-		}
-
-		// Encrypting key+offset with AEAD and attaching an auth tag to it
-		block, err := aes.NewCipher(entry.SharedSecret)
-		if err != nil {
-			return err
-		}
-		aesgcm, err := cipher.NewGCM(block)
-		if err != nil {
-			return err
-		}
-		stone := p.Header.SuitesToCornerstone[entry.Recipient.Suite.String()]
-		if stone != nil {
-			enc = aesgcm.Seal(nil, stone.Nonce, buf, nil)
-			if len(enc) != ENTRYLEN {
-				return errors.New("incorrect length of the encrypted entrypoint")
-			}
-		} else {
-			return errors.New("couldn't retrieve a cornerstone corresponding to this entry")
-		}
-
-		// Find a suitable position and write the entrypoint
-		hash := sha256.New()
-		hash.Write(entry.SharedSecret)
-		absPos := binary.BigEndian.Uint32(hash.Sum(nil)) // Large number to become a position for each has table.
-		var tableOffset uint32 = 0
-		for i := 0; true; i++ {
-			tableSize := uint32(math.Pow(2, float64(i)))
-			pos := absPos % tableSize
-			if tableOffset+pos > uint32(len(p.Header.Layout)) {
-				panic("we ran out of hash tables and did not find a suitable position")
-				return errors.New("couldn't find a place for an entrypoint")
-			}
-			for j := 0; j <= PLACEMENT_MARGIN; j++ {
-				if p.Header.Layout[tableOffset+pos] == nil {
-					p.Header.Layout[tableOffset+pos] = enc
-					break
-				} else {
-					pos = (pos + 1) % tableSize
-				}
-			}
-			// Updating where the current table starts
-			tableOffset += tableSize
-		}
-	}
-	// Fill empty unused entries with random bits
-	for i, cell := range p.Header.Layout {
-		if cell == nil {
-			p.Header.Layout[i] = random.Bytes(ENTRYLEN, stream)
-		}
-	}
-	return nil
-}
-
 //// Write writes content of entrypoints and encrypted payloads into contiguous buffer
 //func (p *Purb) Write() {
 //	for _, entry := range p.Header.Layout {
@@ -291,24 +283,6 @@ func (p *Purb) FillEntrypoints(stream cipher.Stream) error {
 //	}
 //	for _, payload := range p.EncPayloads {
 //		p.buf = append(p.buf, payload.Content...)
-//	}
-//}
-
-//// Prepare initializes a header and places cornerstones. Return a size of future header in bytes
-//func (h *Header) Prepare(decoders []Decoder, info SuiteInfoMap, stream cipher.Stream) {
-//	// Add recipients to the header
-//	for _, d := range decoders {
-//		h.Entries = append(h.Entries, NewEntry(d, nil))
-//	}
-//	if err := h.GenCornerstones(stream); err != nil {
-//		panic(err)
-//	}
-//	if err := h.ComputeSharedSecrets(); err != nil {
-//		panic(err)
-//	}
-//	h.GenHashTables()
-//	if err := h.LocateCornerstones(info); err != nil {
-//		panic(err)
 //	}
 //}
 
@@ -330,14 +304,20 @@ func NewEmptyHeader() *Header {
 	}
 }
 
-func NewPurb(key []byte, nonce []byte) *Purb {
+func NewPurb(key []byte, nonce []byte) (*Purb, error) {
+	if len(nonce) != NONCE_SIZE {
+		return nil, errors.New("incorrect nonce size")
+	}
+	if len(key) != SYMKEYLEN {
+		return nil, errors.New("incorrect symmetric key size")
+	}
 	return &Purb{
 		Nonce:   nonce,
 		Header:  nil,
 		Payload: nil,
 		key:     key,
 		buf:     make([]byte, 0),
-	}
+	}, nil
 }
 
 func KDF(password []byte) []byte {

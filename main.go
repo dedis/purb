@@ -1,7 +1,6 @@
 package main
 
-import "github.com/nikirill/purbs/purb"
-
 func main() {
-	purb.Example()
+	//fmt.Println(len([]byte("key16key16key16!")))
+	//fmt.Println(len([]byte("noncenonce12")))
 }

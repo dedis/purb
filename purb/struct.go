@@ -11,27 +11,14 @@ type SuiteInfo struct {
 	KeyLen    int   // length of each key/point in bytes
 }
 
-// Ephemeral Diffie-Hellman keys for all key-holders using this suite.
-// Should have a uniform representation, e.g., an Elligator point.
-type Cornerstone struct {
-	Priv    abstract.Scalar
-	Pub     abstract.Point
-	Encoded []byte // Elligator Encoded public key
-	Nonce   []byte // Nonce used in AEAD of entrypoints. The same for different entrypoints as keys are different
-}
-
-// Decoder holds information needed to be able to encrypt anything for it
-type Decoder struct {
-	Suite     abstract.Suite
-	PublicKey abstract.Point
-}
-
-//Entry holds the info required to create an entrypoint for each recipient.
-type Entry struct {
-	Recipient    Decoder // Recipient whom this entrypoint is for
-	Data         []byte  // Entrypoint data decryptable by recipient
-	SharedSecret []byte  // Ephemeral secret derived from negotiated DH secret
-	//HeaderPosition int     // Position of the entrypoint in the header of a purb
+// Structure to define the whole PURB
+type Purb struct {
+	Nonce []byte // Nonce used in both AEAD of entrypoints and payload. The same for different entrypoints
+	// as the keys are different. It is stored in the very beginning of the purb
+	Header  *Header
+	Payload []byte // Payload contains already padded plaintext
+	key     []byte //Payload key
+	buf     []byte // Buffer to store intermediate binary representation of purb
 }
 
 // Structure defining the actual header of a purb
@@ -42,16 +29,22 @@ type Header struct {
 	//Layout      []map[int][]byte     // An array of maps where each of the maps represents a hash table and the keys are 0, 1, ... , 2^N
 }
 
-// Structure to define the whole PURB
-type Purb struct {
-	Header      *Header
-	Payload     []byte
-	EncPayloads []EncPayload // A list of encrypted payloads and corresponding keys
+// Ephemeral Diffie-Hellman keys for all key-holders using this suite.
+// Should have a uniform representation, e.g., an Elligator point.
+type Cornerstone struct {
+	Priv    abstract.Scalar
+	Pub     abstract.Point
+	Encoded []byte // Elligator Encoded public key
 }
 
-type EncPayload struct {
-	Key     []byte
-	Suite   string
-	Content []byte
-	Size    int
+//Entry holds the info required to create an entrypoint for each recipient.
+type Entry struct {
+	Recipient    Decoder // Recipient whom this entrypoint is for
+	SharedSecret []byte  // Ephemeral secret derived from negotiated DH secret
+}
+
+// Decoder holds information needed to be able to encrypt anything for it
+type Decoder struct {
+	Suite     abstract.Suite
+	PublicKey abstract.Point
 }
