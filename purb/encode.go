@@ -7,11 +7,13 @@ import (
 	"math"
 	"log"
 	"gopkg.in/dedis/crypto.v0/random"
-	"crypto/cipher"
 	"gopkg.in/dedis/crypto.v0/config"
 	"gopkg.in/dedis/crypto.v0/abstract"
 	"encoding/binary"
 	"crypto/aes"
+	"crypto/cipher"
+	"github.com/nikirill/purbs/padding"
+	"fmt"
 )
 
 // Cornerstone - 40 bytes
@@ -42,24 +44,29 @@ const OFFSET_POINTER_SIZE = 4
 const NONCE_SIZE = 12
 
 // Lenght of authentication tag
-const AUTH_TAG_LEGTH = SYMKEYLEN
+const MAC_SIZE = SYMKEYLEN
 
 //Length of an entrypoint including encrypted key, location of payload start and payload length (16+4+4 bytes),
 //and an authentication tag (16 bytes).
-const ENTRYLEN = SYMKEYLEN + OFFSET_POINTER_SIZE + AUTH_TAG_LEGTH
+const ENTRYLEN = SYMKEYLEN + OFFSET_POINTER_SIZE + MAC_SIZE
 
 // Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
-const PLACEMENT_MARGIN = 2
+const PLACEMENT_MARGIN = 3
 
 func MakePurb(data []byte, decoders []Decoder, si SuiteInfoMap, stream cipher.Stream) ([]byte, error) {
 	// Generate payload key and global nonce. It could be passed by an application above
 	key := random.Bytes(KEYLEN, stream)
 	nonce := random.Bytes(NONCE_SIZE, stream)
+
 	purb, err := NewPurb(key, nonce)
 	if err != nil {
-		log.Panic(err.Error())
+		panic(err.Error())
 	}
 	purb.ConstructHeader(decoders, si, stream)
+	if err:= purb.PadThenEncryptData(data, stream); err != nil {
+		panic(err.Error())
+	}
+	purb.XORCornerstones(si)
 
 	//encPayload, err := AEADEncrypt(data, purb.Nonce, purb.key,nil, stream)
 	//if err != nil {
@@ -75,19 +82,19 @@ func (p *Purb) ConstructHeader(decoders []Decoder, info SuiteInfoMap, stream cip
 	h := NewEmptyHeader()
 	// Add recipients to the header
 	for _, d := range decoders {
-		h.Entries = append(h.Entries, NewEntry(d, nil))
+		h.Entries = append(h.Entries, NewEntry(d))
 	}
-	if err := h.GenCornerstones(stream); err != nil {
+	if err := h.genCornerstones(stream); err != nil {
 		panic(err)
 	}
-	if err := h.ComputeSharedSecrets(); err != nil {
+	if err := h.computeSharedSecrets(); err != nil {
 		panic(err)
 	}
-	h.GenHashTables()
-	if err := h.LocateCornerstones(info, stream); err != nil {
+	h.genHashTables()
+	if err := h.locateCornerstones(info, stream); err != nil {
 		panic(err)
 	}
-	if err := h.FillEntrypoints(p.key, p.Nonce, stream); err != nil {
+	if err := h.fillEntrypoints(p.key, p.Nonce, stream); err != nil {
 		panic(err)
 	}
 
@@ -97,7 +104,7 @@ func (p *Purb) ConstructHeader(decoders []Decoder, info SuiteInfoMap, stream cip
 // Find what unique suits Decoders of the message use,
 // generate a private for each of these suites, and assign
 // them to corresponding entry points
-func (h *Header) GenCornerstones(stream cipher.Stream) error {
+func (h *Header) genCornerstones(stream cipher.Stream) error {
 	for _, e := range h.Entries {
 		var pair *config.KeyPair
 		var encode []byte
@@ -130,7 +137,7 @@ func (h *Header) GenCornerstones(stream cipher.Stream) error {
 // Compute a shared secret per entrypoint used to encrypt it.
 // It takes a public key of a recipient and multiplies it by fresh
 // private key for a given cipher suite.
-func (h *Header) ComputeSharedSecrets() error {
+func (h *Header) computeSharedSecrets() error {
 	for _, e := range h.Entries {
 		skey, ok := h.SuitesToCornerstone[e.Recipient.Suite.String()]
 		if ok {
@@ -151,7 +158,7 @@ func (h *Header) ComputeSharedSecrets() error {
 // Create necessary number of hash tables for the Layout of the header.
 // Number of entries is rounded up to the nearest power of 2 to (the number of cornerstones
 // + the number of entrypoints).
-func (h *Header) GenHashTables() {
+func (h *Header) genHashTables() {
 	var headerEntries int
 	power := math.Logb(float64(len(h.SuitesToCornerstone) + len(h.Entries)))
 	headerEntries = int(math.Pow(2, float64(power)+1)) - 1
@@ -159,7 +166,7 @@ func (h *Header) GenHashTables() {
 }
 
 // Writes cornerstone values to the first available entries of the ones assigned for use ciphersuites
-func (h *Header) LocateCornerstones(suiteInfo SuiteInfoMap, stream cipher.Stream) error {
+func (h *Header) locateCornerstones(suiteInfo SuiteInfoMap, stream cipher.Stream) error {
 	for suite, key := range h.SuitesToCornerstone { // for each cornerstone
 		var buf []byte
 		info := suiteInfo[suite]
@@ -186,10 +193,10 @@ func (h *Header) LocateCornerstones(suiteInfo SuiteInfoMap, stream cipher.Stream
 
 // Encrypt the payload key and offset_start info for each recipient and creates corresponding entrypoints.
 // The position of an entrypoint is defined by hashing the shared secret and computing modulo table size.
-func (h *Header) FillEntrypoints(datakey []byte, gnonce []byte, stream cipher.Stream) error {
+func (h *Header) fillEntrypoints(datakey []byte, gnonce []byte, stream cipher.Stream) error {
 	// Find and save a starting position of the payload
 	offset := make([]byte, OFFSET_POINTER_SIZE)
-	binary.BigEndian.PutUint32(offset, NONCE_SIZE+h.Size())
+	binary.BigEndian.PutUint32(offset, NONCE_SIZE+uint32(h.Size()))
 	attemptCounter := 0
 	enoughTables := true
 	for !enoughTables {
@@ -252,8 +259,20 @@ func (h *Header) FillEntrypoints(datakey []byte, gnonce []byte, stream cipher.St
 }
 
 // Computes the size of a header by simply multiplying the number of allocated byte slices by entrypoint length
-func (h *Header) Size() uint32 {
-	return uint32(len(h.Layout)) * ENTRYLEN
+func (h *Header) Size() int {
+	return len(h.Layout) * ENTRYLEN
+}
+
+func (p *Purb) PadThenEncryptData(data []byte, stream cipher.Stream) error {
+	paddedData := padding.Pad(data, NONCE_SIZE + p.Header.Size() + MAC_SIZE)
+	fmt.Print(paddedData)
+	return nil
+}
+
+func (p *Purb) XORCornerstones(si SuiteInfoMap) {
+	//for suite, stone := range p.Header.SuitesToCornerstone {
+	//	positions := si[suite]
+	//}
 }
 
 // Encrypt the payload of the purb using freshly generated symmetric keys and AEAD.
@@ -287,7 +306,7 @@ func AEADEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]b
 //}
 
 // New entrypoint for a given recipient.
-func NewEntry(dec Decoder, data []byte) *Entry {
+func NewEntry(dec Decoder) *Entry {
 	return &Entry{
 		Recipient:    dec,
 		SharedSecret: make([]byte, SYMKEYLEN),

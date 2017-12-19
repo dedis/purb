@@ -11,13 +11,7 @@ import (
 	"encoding/hex"
 )
 
-//func TestPurb(t *testing.T) {
-//	info := createInfo()
-//	fmt.Println(info[edwards.NewAES128SHA256Ed25519(false).String()].Positions)
-//	h := NewEmptyHeader()
-//	h.Fill()
-//}
-//
+
 //func TestPurb_EncryptPayload(t *testing.T) {
 //	payload := []byte("Test AEAD")
 //	h := NewEmptyHeader()
@@ -35,9 +29,9 @@ func TestHeader_GenCornerstones(t *testing.T) {
 	h := NewEmptyHeader()
 	decoders := createDecoders()
 	for _, d := range decoders {
-		h.Entries = append(h.Entries, NewEntry(d, nil))
+		h.Entries = append(h.Entries, NewEntry(d))
 	}
-	h.GenCornerstones(random.Stream)
+	h.genCornerstones(random.Stream)
 	for _, stone := range h.SuitesToCornerstone {
 		//fmt.Println(hex.EncodeToString(stone.Encoded))
 		require.Equal(t, len(stone.Encoded), KEYLEN)
@@ -47,7 +41,7 @@ func TestHeader_GenCornerstones(t *testing.T) {
 }
 
 func TestPurb_ConstructHeader(t *testing.T) {
-	fmt.Println("========TEST Construct Header=========")
+	fmt.Println("=================TEST Construct Header=================")
 	// Generate payload key and global nonce. It could be passed by an application above
 	key := "key16key16key16!"
 	nonce := "noncenonce12"
@@ -80,7 +74,7 @@ func createDecoders() []Decoder {
 	//suites := []abstract.Suite{edwards.NewAES128SHA256Ed25519(true), ed25519.NewAES128SHA256Ed25519(true)}
 	suites := []abstract.Suite{edwards.NewAES128SHA256Ed25519(true)}
 	for _, suite := range suites {
-		for i:=0; i<3; i++ {
+		for i:=0; i<5; i++ {
 			pair := config.NewKeyPair(suite)
 			decs = append(decs, Decoder{suite, pair.Public})
 		}
