@@ -26,6 +26,7 @@ type Header struct {
 	SuitesToEntries     map[string][]*Entry     // List of entrypoints
 	SuitesToCornerstone map[string]*Cornerstone // Holds sender's ephemeral private/public keys for each suite in the header
 	Layout              SkipLayout              // An array of byte slices where each of the bytes slice represents a hash table entry
+	Length              int
 	//Layout              [][]byte                // An array of byte slices where each of the bytes slice represents a hash table entry
 }
 

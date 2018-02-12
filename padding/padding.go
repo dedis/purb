@@ -21,12 +21,12 @@ const STARTPADBYTE = 0x80
 // Pads a message according the defined scheme.
 // 'other' is a number of additional bytes in purb (header, nonce, mac)
 // that need to be taken into account when computing the amount of padding.
-func Pad(msg []byte, other int) []byte {
+func Pad(msg *[]byte, other int) []byte {
 	var paddedMsg []byte
 	// STARTPADBYTE must be always present so we append it first and then compute
 	// amount of zero padding needed
-	msg = append(msg, STARTPADBYTE)
-	msgLen := 8 * (uint64(len(msg) + other)) // Length in bits
+	*msg = append(*msg, STARTPADBYTE)
+	msgLen := 8 * (uint64(len(*msg) + other)) // Length in bits
 	padLen := paddingLength(msgLen)
 	// Convert padding length to the number of bytes needed
 	if padLen < 8 && padLen != 0 {
@@ -36,7 +36,7 @@ func Pad(msg []byte, other int) []byte {
 	}
 	// Padding the message with zeros
 	pad := make([]byte, padLen)
-	paddedMsg = append(msg, pad...)
+	paddedMsg = append(*msg, pad...)
 	return paddedMsg
 }
 

@@ -12,7 +12,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"github.com/nikirill/purbs/padding"
-	"fmt"
 	"strconv"
 	"sort"
 )
@@ -47,14 +46,13 @@ const NONCE_SIZE = 12
 // Lenght of authentication tag
 const MAC_SIZE = SYMKEYLEN
 
-//Length of an entrypoint including encrypted key, location of payload start and payload length (16+4+4 bytes),
-//and an authentication tag (16 bytes).
-const ENTRYLEN = SYMKEYLEN + OFFSET_POINTER_SIZE + MAC_SIZE
+//Length of an entrypoint including encryption key and location of payload start
+const ENTRYLEN = SYMKEYLEN + OFFSET_POINTER_SIZE
 
 // Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
 const PLACEMENT_ATTEMPTS = 3
 
-func MakePurb(data []byte, decoders []Decoder, si SuiteInfoMap, stream cipher.Stream) ([]byte, error) {
+func MakePurb(data []byte, decoders []Decoder, si SuiteInfoMap, stream cipher.Stream) (*[]byte, error) {
 	// Generate payload key and global nonce. It could be passed by an application above
 	key := random.Bytes(KEYLEN, stream)
 	nonce := random.Bytes(NONCE_SIZE, stream)
@@ -64,19 +62,12 @@ func MakePurb(data []byte, decoders []Decoder, si SuiteInfoMap, stream cipher.St
 		panic(err.Error())
 	}
 	purb.ConstructHeader(decoders, &si, stream)
-	if err := purb.PadThenEncryptData(data, stream); err != nil {
+	if err := purb.PadThenEncryptData(&data, stream); err != nil {
 		panic(err.Error())
 	}
-	purb.XORCornerstones(si)
+	purb.Write(stream)
 
-	//encPayload, err := AEADEncrypt(data, purb.Nonce, purb.key,nil, stream)
-	//if err != nil {
-	//	panic(err)
-	//}
-	//purb.Write()
-	//purb.buf = padding.Pad(purb.buf)
-
-	return nil, nil
+	return &purb.buf, nil
 }
 
 func (p *Purb) ConstructHeader(decoders []Decoder, info *SuiteInfoMap, stream cipher.Stream) {
@@ -178,7 +169,11 @@ func (h *Header) locateCornerstones(suiteInfo *SuiteInfoMap, stream cipher.Strea
 	// but can overlap positions for ciphersuites to be computed later.
 	var exclude SkipLayout
 	exclude.Reset()
-	headerLen := 0
+
+	// Place a nonce for AEAD first at the beginning of purb
+	exclude.Reserve(0, NONCE_SIZE-1, true, "nonce" )
+	h.Layout.Reserve(0, NONCE_SIZE-1, true, "nonce" )
+
 	stones := make([]*Cornerstone, 0)
 	for _, stone := range h.SuitesToCornerstone {
 		stones = append(stones, stone)
@@ -199,7 +194,7 @@ func (h *Header) locateCornerstones(suiteInfo *SuiteInfoMap, stream cipher.Strea
 		npos := len(info.Positions)
 		for j := npos - 1; j >= 0; j-- {
 			low := info.Positions[j]
-			high := low + info.KeyLen
+			high := low + info.KeyLen - 1
 			//fmt.Printf("reserving [%d-%d]\n", low,high)
 			if exclude.Reserve(low, high, false, stone.SuiteName) && j == npos-1 {
 				npos = j // no conflict, shift down
@@ -212,8 +207,8 @@ func (h *Header) locateCornerstones(suiteInfo *SuiteInfoMap, stream cipher.Strea
 
 		// Permanently reserve the primary point position in h.Layout
 		low, high := info.region(npos)
-		if high > headerLen {
-			headerLen = high
+		if high + 1 > h.Length {
+			h.Length = high + 1 // +1 because bytes are counted from 0
 		}
 		if !h.Layout.Reserve(low, high, true, stone.SuiteName) {
 			panic("thought we had that position reserved??")
@@ -235,16 +230,22 @@ func (h *Header) locateEntries(suiteInfo *SuiteInfoMap, sOrder *[]string, stream
 			hash := sha256.New()
 			hash.Write(entry.SharedSecret)
 			absPos := int(binary.BigEndian.Uint32(hash.Sum(nil))) // Large number to become a position
+			var tHash int
 			for {
 				for j := 0; j < PLACEMENT_ATTEMPTS; j++ {
-					tHash := (absPos + j) % tableSize
-					if h.Layout.Reserve(start+tHash*ENTRYLEN, start+(tHash+1)*ENTRYLEN, true, "hash"+strconv.Itoa(tableSize)) {
-						h.SuitesToEntries[suite][i].Offset = start+tHash*ENTRYLEN
+					tHash = (absPos + j) % tableSize
+					if h.Layout.Reserve(start+tHash*ENTRYLEN, start+(tHash+1)*ENTRYLEN - 1, true, "hash"+strconv.Itoa(tableSize)) {
+						h.SuitesToEntries[suite][i].Offset = start + tHash*ENTRYLEN
 						located = true
 						break
 					}
 				}
 				if located {
+					// save end of the current table as the length of the header
+					end := start+(tHash+1)*ENTRYLEN
+					if end > h.Length {
+						h.Length = end
+					}
 					break
 				} else {
 					//If we haven't located the entry, update the hash table size and start
@@ -257,98 +258,60 @@ func (h *Header) locateEntries(suiteInfo *SuiteInfoMap, sOrder *[]string, stream
 	}
 }
 
-//// Encrypt the payload key and offset_start info for each recipient and creates corresponding entrypoints.
-//// The position of an entrypoint is defined by hashing the shared secret and computing modulo table size.
-//func (h *Header) fillEntrypoints(datakey []byte, gnonce []byte, stream cipher.Stream) error {
-//	// Find and save a starting position of the payload
-//	offset := make([]byte, OFFSET_POINTER_SIZE)
-//	binary.BigEndian.PutUint32(offset, NONCE_SIZE+uint32(h.Size()))
-//	attemptCounter := 0
-//	enoughTables := true
-//	for !enoughTables {
-//		for _, entry := range h.Entries {
-//			var enc []byte
-//			// Prepare data to place in
-//			buf := datakey
-//			buf = append(buf, offset...)
-//			enc, err := AEADEncrypt(buf, gnonce, entry.SharedSecret, nil, stream)
-//			if err != nil {
-//				return err
-//			}
-//			if len(enc) != ENTRYLEN {
-//				return errors.New("incorrect length of the encrypted entrypoint")
-//			}
-//
-//			// Find a suitable position and write the entrypoint
-//			hash := sha256.New()
-//			hash.Write(entry.SharedSecret)
-//			absPos := int(binary.BigEndian.Uint32(hash.Sum(nil))) // Large number to become a position
-//			var tableOffset = 0
-//			for i := 0; true; i++ {
-//				tableSize := int(math.Pow(2, float64(i)))
-//				pos := absPos % tableSize
-//				if tableOffset+pos > len(h.Layout)-1 {
-//					enoughTables = false
-//					break
-//				}
-//				for j := 0; j <= PLACEMENT_ATTEMPTS; j++ {
-//					if h.Layout[tableOffset+pos] == nil {
-//						h.Layout[tableOffset+pos] = enc
-//						break
-//					} else {
-//						pos = (pos + 1) % tableSize
-//					}
-//				}
-//				// Updating where the current table starts
-//				tableOffset += tableSize
-//			}
-//			if enoughTables == false {
-//				// We try to grow the layout twice if there is not space. If it doesn't help, then panic
-//				if attemptCounter += 1; attemptCounter < 2 {
-//					addition := make([][]byte, len(h.Layout)+1)
-//					h.Layout = append(h.Layout, addition...)
-//					break
-//				} else {
-//					panic("we ran out of hash tables and did not find a suitable position")
-//					return errors.New("couldn't find a place for an entrypoint")
-//				}
-//			}
-//		}
-//	}
-//	// Fill empty unused entries with random bits
-//	for i, cell := range h.Layout {
-//		if cell == nil {
-//			h.Layout[i] = random.Bytes(ENTRYLEN, stream)
-//		}
-//	}
-//	return nil
-//}
+// Write writes content of entrypoints and encrypted payloads into contiguous buffer
+func (p *Purb) Write(stream cipher.Stream) {
+	// copy nonce first
+	if len(p.Nonce) != 0 {
+		msgbuf := p.growBuf(0, NONCE_SIZE)
+		copy(msgbuf, p.Nonce)
+	}
+	// copy cornerstones
+	for _, corner := range p.Header.SuitesToCornerstone {
+		msgbuf := p.growBuf(corner.Offset, corner.Offset + len(corner.Encoded))
+		copy(msgbuf, corner.Encoded)
+	}
 
-// Computes the size of a header by simply multiplying the number of allocated byte slices by entrypoint length
-func (h *Header) Size() int {
-	return 0
+	// encrypt and copy entries
+	payloadOffset := make([]byte, OFFSET_POINTER_SIZE)
+	binary.BigEndian.PutUint32(payloadOffset, uint32(p.Header.Length))
+	entryData := append(p.key, payloadOffset...)
+	for _, entries := range p.Header.SuitesToEntries {
+		for _, entry := range entries {
+			// we use shared secret as a seed to a stream cipher
+			cipher := entry.Recipient.Suite.Cipher(entry.SharedSecret)
+			msgbuf := p.growBuf(entry.Offset, entry.Offset + ENTRYLEN)
+			cipher.XORKeyStream(msgbuf, entryData)
+		}
+	}
+
+	// Fill all unused parts of the header with random bits.
+	msglen := len(p.buf)
+	p.Header.Layout.scanFree(func(lo, hi int) {
+		msgbuf := p.growBuf(lo, hi)
+		stream.XORKeyStream(msgbuf, msgbuf)
+	}, msglen)
+
 }
 
-func (p *Purb) PadThenEncryptData(data []byte, stream cipher.Stream) error {
-	paddedData := padding.Pad(data, NONCE_SIZE+p.Header.Size()+MAC_SIZE)
-	fmt.Print(paddedData)
+func (p *Purb) PadThenEncryptData(data *[]byte, stream cipher.Stream) error {
+	var err error
+	paddedData := padding.Pad(data, p.Header.Length + MAC_SIZE)
+	p.Payload, err = AEADEncrypt(&paddedData, &p.Nonce, &p.key,nil, stream)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	//fmt.Print(paddedData)
 	return nil
-}
-
-func (p *Purb) XORCornerstones(si SuiteInfoMap) {
-	//for suite, stone := range p.Header.SuitesToCornerstone {
-	//	positions := si[suite]
-	//}
 }
 
 // Encrypt the payload of the purb using freshly generated symmetric keys and AEAD.
 // Payload is encrypted as many times as there are distinct cornerstone values (corresponding cipher suites used).
-func AEADEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]byte, error) {
+func AEADEncrypt(data, nonce, key, additional *[]byte, stream cipher.Stream) ([]byte, error) {
 	// Generate a random 16-byte key and create a cipher from it
 	if key == nil {
-		key = random.Bytes(KEYLEN, stream)
+		*key = random.Bytes(KEYLEN, stream)
 	}
-	block, err := aes.NewCipher(key)
+	block, err := aes.NewCipher(*key)
 	if err != nil {
 		return nil, err
 	}
@@ -357,26 +320,33 @@ func AEADEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]b
 		panic(err.Error())
 	}
 	// Encrypt and authenticate payload
-	enc := aesgcm.Seal(nil, nonce, data, additional) // additional can be nil
+	var enc []byte
+	if additional != nil {
+		enc = aesgcm.Seal(nil, *nonce, *data, *additional) // additional can be nil
+	} else {
+		enc = aesgcm.Seal(nil, *nonce, *data, []byte{}) // additional can be nil
+	}
+
 	return enc, nil
+}
+
+// Grow the message buffer to include the region from lo to hi,
+// and return a slice representing that region.
+func (p *Purb) growBuf(lo, hi int) []byte {
+	if len(p.buf) < hi {
+		b := make([]byte, hi)
+		copy(b, p.buf)
+		p.buf = b
+	}
+	return p.buf[lo:hi]
 }
 
 // Return the byte-range for a point at a given level.
 func (si *SuiteInfo) region(level int) (int, int) {
 	low := si.Positions[level]
-	high := low + si.KeyLen
+	high := low + si.KeyLen - 1
 	return low, high
 }
-
-//// Write writes content of entrypoints and encrypted payloads into contiguous buffer
-//func (p *Purb) Write() {
-//	for _, entry := range p.Header.Layout {
-//		p.buf = append(p.buf, entry...)
-//	}
-//	for _, payload := range p.EncPayloads {
-//		p.buf = append(p.buf, payload.Content...)
-//	}
-//}
 
 // New entrypoint for a given recipient.
 func NewEntry(dec Decoder) *Entry {
@@ -393,6 +363,7 @@ func NewEmptyHeader() *Header {
 		SuitesToEntries:     make(map[string][]*Entry),
 		SuitesToCornerstone: make(map[string]*Cornerstone),
 		Layout:              nil,
+		Length:              0,
 	}
 }
 
