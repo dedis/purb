@@ -261,6 +261,17 @@ func (h *Header) locateEntries(suiteInfo *SuiteInfoMap, sOrder *[]string, stream
 	}
 }
 
+func (p *Purb) PadThenEncryptData(data *[]byte, stream cipher.Stream) error {
+	var err error
+	paddedData := padding.Pad(data, p.Header.Length + MAC_SIZE)
+	p.Payload, err = AEADEncrypt(&paddedData, &p.Nonce, &p.key,nil, stream)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	//fmt.Print(paddedData)
+	return nil
+}
+
 // Write writes content of entrypoints and encrypted payloads into contiguous buffer
 func (p *Purb) Write(stream cipher.Stream) {
 	// copy nonce first
@@ -268,10 +279,15 @@ func (p *Purb) Write(stream cipher.Stream) {
 		msgbuf := p.growBuf(0, NONCE_SIZE)
 		copy(msgbuf, p.Nonce)
 	}
+	dummy := make([]byte, 0)
+	for i:=0; i<32; i++ {
+		dummy = append(dummy, 0xFF)
+	}
 	// copy cornerstones
 	for _, corner := range p.Header.SuitesToCornerstone {
 		msgbuf := p.growBuf(corner.Offset, corner.Offset + len(corner.Encoded))
 		copy(msgbuf, corner.Encoded)
+		copy(msgbuf, dummy)
 	}
 
 	// encrypt and copy entries
@@ -288,24 +304,24 @@ func (p *Purb) Write(stream cipher.Stream) {
 		}
 	}
 
+	log.Printf("Buffer with header before: %x", p.buf)
 	// Fill all unused parts of the header with random bits.
 	msglen := len(p.buf)
 	p.Header.Layout.scanFree(func(lo, hi int) {
 		msgbuf := p.growBuf(lo, hi)
 		stream.XORKeyStream(msgbuf, msgbuf)
 	}, msglen)
+	log.Printf("Final length of header: %d", len(p.buf))
+	log.Printf("Buffer with header: %x", p.buf)
 
-}
+	// copy message into buffer
+	p.buf = append(p.buf, p.Payload...)
+	//log.Printf("Buffer with payload: %x", p.buf)
 
-func (p *Purb) PadThenEncryptData(data *[]byte, stream cipher.Stream) error {
-	var err error
-	paddedData := padding.Pad(data, p.Header.Length + MAC_SIZE)
-	p.Payload, err = AEADEncrypt(&paddedData, &p.Nonce, &p.key,nil, stream)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	//fmt.Print(paddedData)
-	return nil
+	// XOR each cornerstone with the data in its non-primary positions and save as the cornerstone value
+	//for _, corner := range p.Header.SuitesToCornerstone {
+	//
+	//}
 }
 
 // Encrypt the payload of the purb using freshly generated symmetric keys and AEAD.
