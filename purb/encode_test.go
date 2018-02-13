@@ -8,9 +8,7 @@ import (
 	"gopkg.in/dedis/crypto.v0/config"
 	"github.com/stretchr/testify/require"
 	"fmt"
-	"encoding/hex"
 )
-
 
 //func TestPurb_EncryptPayload(t *testing.T) {
 //	payload := []byte("Test AEAD")
@@ -25,13 +23,12 @@ import (
 //}
 
 func TestHeader_GenCornerstones(t *testing.T) {
+	fmt.Println("=================TEST Generate Cornerstones=================")
 	//info := createInfo()
 	h := NewEmptyHeader()
 	decoders := createDecoders()
-	for _, d := range decoders {
-		h.Entries = append(h.Entries, NewEntry(d))
-	}
-	h.genCornerstones(random.Stream)
+	si := createInfo()
+	h.genCornerstones(&decoders, &si, random.Stream)
 	for _, stone := range h.SuitesToCornerstone {
 		//fmt.Println(hex.EncodeToString(stone.Encoded))
 		require.Equal(t, len(stone.Encoded), KEYLEN)
@@ -51,17 +48,31 @@ func TestPurb_ConstructHeader(t *testing.T) {
 	}
 	si := createInfo()
 	decs := createDecoders()
-	purb.ConstructHeader(decs, si, random.Stream)
-	fmt.Println("Content of the entries:")
-	for _, cell := range purb.Header.Layout {
-		fmt.Println(hex.EncodeToString(cell))
+	purb.ConstructHeader(decs, &si, random.Stream)
+	//fmt.Println("Content of the entries:")
+	//for _, cell := range purb.Header.Layout {
+	//	fmt.Println(hex.EncodeToString(cell))
+	//}
+}
+
+func TestPurb_Write(t *testing.T) {
+	fmt.Println("=================TEST PURB Write=================")
+	key := "key16key16key16!"
+	nonce := "noncenonce12"
+	purb, err := NewPurb([]byte(key), []byte(nonce))
+	if err != nil {
+		panic(err.Error())
 	}
+	si := createInfo()
+	decs := createDecoders()
+	purb.ConstructHeader(decs, &si, random.Stream)
+	purb.Write(random.Stream)
 }
 
 func createInfo() SuiteInfoMap {
 	info := make(SuiteInfoMap)
 	info[edwards.NewAES128SHA256Ed25519(true).String()] = &SuiteInfo{
-		Positions: []int{0*ENTRYLEN, 1*ENTRYLEN, 3*ENTRYLEN},
+		Positions: []int{12 + 0 * KEYLEN, 12 + 1 * KEYLEN, 12 + 3 * KEYLEN, 12 + 4 * KEYLEN},
 		KeyLen:    KEYLEN,}
 	//info[ed25519.NewAES128SHA256Ed25519(true).String()] = &SuiteInfo{
 	//	Positions: []int{0, 40, 160},
@@ -74,7 +85,7 @@ func createDecoders() []Decoder {
 	//suites := []abstract.Suite{edwards.NewAES128SHA256Ed25519(true), ed25519.NewAES128SHA256Ed25519(true)}
 	suites := []abstract.Suite{edwards.NewAES128SHA256Ed25519(true)}
 	for _, suite := range suites {
-		for i:=0; i<5; i++ {
+		for i := 0; i < 5; i++ {
 			pair := config.NewKeyPair(suite)
 			decs = append(decs, Decoder{suite, pair.Public})
 		}

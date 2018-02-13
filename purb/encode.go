@@ -114,6 +114,7 @@ func (h *Header) genCornerstones(decoders *[]Decoder, info *SuiteInfoMap, stream
 				encode = pair.Public.(abstract.Hiding).HideEncode(stream)
 				if pair.Secret != nil && pair.Public != nil {
 					if encode != nil {
+						log.Printf("Generated public key: %x", encode)
 						if len(encode) != (*info)[dec.Suite.String()].KeyLen {
 							log.Fatal("Length of elligator Encoded key is not what we expect. It's ", len(encode))
 						}
@@ -195,12 +196,12 @@ func (h *Header) locateCornerstones(suiteInfo *SuiteInfoMap, stream cipher.Strea
 		for j := npos - 1; j >= 0; j-- {
 			low := info.Positions[j]
 			high := low + info.KeyLen - 1
-			//fmt.Printf("reserving [%d-%d]\n", low,high)
+			//log.Printf("reserving [%d-%d] for suite %s\n", low, high, stone.SuiteName)
 			if exclude.Reserve(low, high, false, stone.SuiteName) && j == npos-1 {
 				npos = j // no conflict, shift down
 			}
 		}
-		if npos == len(stones) {
+		if npos == len(info.Positions) {
 			return nil, errors.New("no viable position for suite " + stone.SuiteName)
 		}
 		h.SuitesToCornerstone[stone.SuiteName].Offset = info.Positions[npos]
@@ -210,6 +211,7 @@ func (h *Header) locateCornerstones(suiteInfo *SuiteInfoMap, stream cipher.Strea
 		if high + 1 > h.Length {
 			h.Length = high + 1 // +1 because bytes are counted from 0
 		}
+		log.Printf("reserving [%d-%d] for suite %s\n", low, high, stone.SuiteName)
 		if !h.Layout.Reserve(low, high, true, stone.SuiteName) {
 			panic("thought we had that position reserved??")
 		}
@@ -237,6 +239,7 @@ func (h *Header) locateEntries(suiteInfo *SuiteInfoMap, sOrder *[]string, stream
 					if h.Layout.Reserve(start+tHash*ENTRYLEN, start+(tHash+1)*ENTRYLEN - 1, true, "hash"+strconv.Itoa(tableSize)) {
 						h.SuitesToEntries[suite][i].Offset = start + tHash*ENTRYLEN
 						located = true
+						log.Printf("Placing entry at [%d-%d]", start+tHash*ENTRYLEN, start+(tHash+1)*ENTRYLEN - 1)
 						break
 					}
 				}
@@ -281,6 +284,7 @@ func (p *Purb) Write(stream cipher.Stream) {
 			cipher := entry.Recipient.Suite.Cipher(entry.SharedSecret)
 			msgbuf := p.growBuf(entry.Offset, entry.Offset + ENTRYLEN)
 			cipher.XORKeyStream(msgbuf, entryData)
+			log.Printf("Entry content to place: %x", msgbuf)
 		}
 	}
 
@@ -362,7 +366,6 @@ func NewEmptyHeader() *Header {
 	return &Header{
 		SuitesToEntries:     make(map[string][]*Entry),
 		SuitesToCornerstone: make(map[string]*Cornerstone),
-		Layout:              nil,
 		Length:              0,
 	}
 }
