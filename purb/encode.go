@@ -172,8 +172,8 @@ func (h *Header) locateCornerstones(suiteInfo *SuiteInfoMap, stream cipher.Strea
 	exclude.Reset()
 
 	// Place a nonce for AEAD first at the beginning of purb
-	exclude.Reserve(0, NONCE_SIZE-1, true, "nonce" )
-	h.Layout.Reserve(0, NONCE_SIZE-1, true, "nonce" )
+	exclude.Reserve(0, NONCE_SIZE, true, "nonce" )
+	h.Layout.Reserve(0, NONCE_SIZE, true, "nonce" )
 
 	stones := make([]*Cornerstone, 0)
 	for _, stone := range h.SuitesToCornerstone {
@@ -195,7 +195,7 @@ func (h *Header) locateCornerstones(suiteInfo *SuiteInfoMap, stream cipher.Strea
 		npos := len(info.Positions)
 		for j := npos - 1; j >= 0; j-- {
 			low := info.Positions[j]
-			high := low + info.KeyLen - 1
+			high := low + info.KeyLen
 			//log.Printf("reserving [%d-%d] for suite %s\n", low, high, stone.SuiteName)
 			if exclude.Reserve(low, high, false, stone.SuiteName) && j == npos-1 {
 				npos = j // no conflict, shift down
@@ -208,8 +208,8 @@ func (h *Header) locateCornerstones(suiteInfo *SuiteInfoMap, stream cipher.Strea
 
 		// Permanently reserve the primary point position in h.Layout
 		low, high := info.region(npos)
-		if high + 1 > h.Length {
-			h.Length = high + 1 // +1 because bytes are counted from 0
+		if high > h.Length {
+			h.Length = high // +1 because bytes are counted from 0
 		}
 		log.Printf("reserving [%d-%d] for suite %s\n", low, high, stone.SuiteName)
 		if !h.Layout.Reserve(low, high, true, stone.SuiteName) {
@@ -236,16 +236,16 @@ func (h *Header) locateEntries(suiteInfo *SuiteInfoMap, sOrder *[]string, stream
 			for {
 				for j := 0; j < PLACEMENT_ATTEMPTS; j++ {
 					tHash = (absPos + j) % tableSize
-					if h.Layout.Reserve(start+tHash*ENTRYLEN, start+(tHash+1)*ENTRYLEN - 1, true, "hash"+strconv.Itoa(tableSize)) {
+					if h.Layout.Reserve(start+tHash*ENTRYLEN, start+(tHash+1)*ENTRYLEN, true, "hash"+strconv.Itoa(tableSize)) {
 						h.SuitesToEntries[suite][i].Offset = start + tHash*ENTRYLEN
 						located = true
-						log.Printf("Placing entry at [%d-%d]", start+tHash*ENTRYLEN, start+(tHash+1)*ENTRYLEN - 1)
+						log.Printf("Placing entry at [%d-%d]", start+tHash*ENTRYLEN, start+(tHash+1)*ENTRYLEN)
 						break
 					}
 				}
 				if located {
 					// save end of the current table as the length of the header
-					end := start+(tHash+1)*ENTRYLEN
+					end := start+(tHash+1)*ENTRYLEN + 1
 					if end > h.Length {
 						h.Length = end
 					}
@@ -304,7 +304,7 @@ func (p *Purb) Write(stream cipher.Stream) {
 		}
 	}
 
-	log.Printf("Buffer with header before: %x", p.buf)
+	log.Printf("Buffer with header: %x", p.buf)
 	// Fill all unused parts of the header with random bits.
 	msglen := len(p.buf)
 	p.Header.Layout.scanFree(func(lo, hi int) {
@@ -364,7 +364,7 @@ func (p *Purb) growBuf(lo, hi int) []byte {
 // Return the byte-range for a point at a given level.
 func (si *SuiteInfo) region(level int) (int, int) {
 	low := si.Positions[level]
-	high := low + si.KeyLen - 1
+	high := low + si.KeyLen
 	return low, high
 }
 
