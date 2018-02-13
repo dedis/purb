@@ -66,7 +66,9 @@ func TestPurb_Write(t *testing.T) {
 	si := createInfo()
 	decs := createDecoders()
 	purb.ConstructHeader(decs, &si, random.Stream)
-	purb.Write(random.Stream)
+	data := []byte("gorilla")
+	purb.PadThenEncryptData(&data, random.Stream)
+	purb.Write(&si, random.Stream)
 }
 
 func createInfo() SuiteInfoMap {

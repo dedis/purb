@@ -65,7 +65,7 @@ func MakePurb(data []byte, decoders []Decoder, si SuiteInfoMap, stream cipher.St
 	if err := purb.PadThenEncryptData(&data, stream); err != nil {
 		panic(err.Error())
 	}
-	purb.Write(stream)
+	purb.Write(&si, stream)
 
 	return &purb.buf, nil
 }
@@ -172,8 +172,8 @@ func (h *Header) locateCornerstones(suiteInfo *SuiteInfoMap, stream cipher.Strea
 	exclude.Reset()
 
 	// Place a nonce for AEAD first at the beginning of purb
-	exclude.Reserve(0, NONCE_SIZE, true, "nonce" )
-	h.Layout.Reserve(0, NONCE_SIZE, true, "nonce" )
+	exclude.Reserve(0, NONCE_SIZE, true, "nonce")
+	h.Layout.Reserve(0, NONCE_SIZE, true, "nonce")
 
 	stones := make([]*Cornerstone, 0)
 	for _, stone := range h.SuitesToCornerstone {
@@ -245,7 +245,7 @@ func (h *Header) locateEntries(suiteInfo *SuiteInfoMap, sOrder *[]string, stream
 				}
 				if located {
 					// save end of the current table as the length of the header
-					end := start+(tHash+1)*ENTRYLEN + 1
+					end := start + (tHash+1)*ENTRYLEN + 1
 					if end > h.Length {
 						h.Length = end
 					}
@@ -263,8 +263,8 @@ func (h *Header) locateEntries(suiteInfo *SuiteInfoMap, sOrder *[]string, stream
 
 func (p *Purb) PadThenEncryptData(data *[]byte, stream cipher.Stream) error {
 	var err error
-	paddedData := padding.Pad(data, p.Header.Length + MAC_SIZE)
-	p.Payload, err = AEADEncrypt(&paddedData, &p.Nonce, &p.key,nil, stream)
+	paddedData := padding.Pad(data, p.Header.Length+MAC_SIZE)
+	p.Payload, err = AEADEncrypt(&paddedData, &p.Nonce, &p.key, nil, stream)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -273,21 +273,21 @@ func (p *Purb) PadThenEncryptData(data *[]byte, stream cipher.Stream) error {
 }
 
 // Write writes content of entrypoints and encrypted payloads into contiguous buffer
-func (p *Purb) Write(stream cipher.Stream) {
+func (p *Purb) Write(suiteInfo *SuiteInfoMap, stream cipher.Stream) {
 	// copy nonce first
 	if len(p.Nonce) != 0 {
 		msgbuf := p.growBuf(0, NONCE_SIZE)
 		copy(msgbuf, p.Nonce)
 	}
-	dummy := make([]byte, 0)
-	for i:=0; i<32; i++ {
-		dummy = append(dummy, 0xFF)
-	}
+	//dummy := make([]byte, 0)
+	//for i:=0; i<32; i++ {
+	//	dummy = append(dummy, 0xFF)
+	//}
 	// copy cornerstones
 	for _, corner := range p.Header.SuitesToCornerstone {
-		msgbuf := p.growBuf(corner.Offset, corner.Offset + len(corner.Encoded))
+		msgbuf := p.growBuf(corner.Offset, corner.Offset+len(corner.Encoded))
 		copy(msgbuf, corner.Encoded)
-		copy(msgbuf, dummy)
+		//copy(msgbuf, dummy)
 	}
 
 	// encrypt and copy entries
@@ -297,31 +297,50 @@ func (p *Purb) Write(stream cipher.Stream) {
 	for _, entries := range p.Header.SuitesToEntries {
 		for _, entry := range entries {
 			// we use shared secret as a seed to a stream cipher
-			cipher := entry.Recipient.Suite.Cipher(entry.SharedSecret)
-			msgbuf := p.growBuf(entry.Offset, entry.Offset + ENTRYLEN)
-			cipher.XORKeyStream(msgbuf, entryData)
+			sec := entry.Recipient.Suite.Cipher(entry.SharedSecret)
+			msgbuf := p.growBuf(entry.Offset, entry.Offset+ENTRYLEN)
+			sec.XORKeyStream(msgbuf, entryData)
 			log.Printf("Entry content to place: %x", msgbuf)
 		}
 	}
 
-	log.Printf("Buffer with header: %x", p.buf)
+	//log.Printf("Buffer with header: %x", p.buf)
 	// Fill all unused parts of the header with random bits.
 	msglen := len(p.buf)
 	p.Header.Layout.scanFree(func(lo, hi int) {
 		msgbuf := p.growBuf(lo, hi)
 		stream.XORKeyStream(msgbuf, msgbuf)
 	}, msglen)
-	log.Printf("Final length of header: %d", len(p.buf))
-	log.Printf("Buffer with header: %x", p.buf)
+	//log.Printf("Final length of header: %d", len(p.buf))
+	//log.Printf("Buffer with header: %x", p.buf)
 
 	// copy message into buffer
 	p.buf = append(p.buf, p.Payload...)
-	//log.Printf("Buffer with payload: %x", p.buf)
+	log.Printf("Buffer with payload: %x", p.buf)
 
 	// XOR each cornerstone with the data in its non-primary positions and save as the cornerstone value
-	//for _, corner := range p.Header.SuitesToCornerstone {
-	//
-	//}
+	for _, corner := range p.Header.SuitesToCornerstone {
+		keylen := len(corner.Encoded)
+		corbuf := make([]byte, keylen)
+		for _, offset := range (*suiteInfo)[corner.SuiteName].Positions {
+			stop := offset+keylen
+			// check that we have data at non-primary positions to xor
+			if stop > len(p.buf) {
+				if offset > len(p.buf) {
+					continue
+				} else {
+					stop = len(p.buf)
+				}
+			}
+			tmp := p.buf[offset:stop]
+			for b:=0; b<keylen; b++ {
+				corbuf[b] ^= tmp[b]
+			}
+		}
+		// copy the result of XOR to the primary position
+		copy(p.buf[corner.Offset:corner.Offset+keylen], corbuf)
+	}
+	log.Printf("Buffer with xored: %x", p.buf)
 }
 
 // Encrypt the payload of the purb using freshly generated symmetric keys and AEAD.
