@@ -48,7 +48,9 @@ type Entry struct {
 }
 
 // Decoder holds information needed to be able to encrypt anything for it
+// PrivateKey is nil for encoder
 type Decoder struct {
-	Suite     abstract.Suite
-	PublicKey abstract.Point
+	Suite      abstract.Suite
+	PublicKey  abstract.Point
+	PrivateKey abstract.Scalar
 }

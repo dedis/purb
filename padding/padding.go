@@ -48,7 +48,7 @@ func UnPad(msg []byte) []byte {
 // Computes amount of padding needed
 func paddingLength(msgLen uint64) int {
 	var i, mask, paddingNeeded uint64
-	zeroBits := BitsToZero(msgLen)
+	zeroBits := bitsToZero(msgLen)
 	//fmt.Printf("Number of zero bits for msg of len %b is %v\n", msgLen, zeroBits)
 	//Generate a mask that we use to isolate the zeroBits bits of the length (e.g., 11111)
 	for i=0; i<zeroBits; i++ {
@@ -66,7 +66,7 @@ func paddingLength(msgLen uint64) int {
 
 // Returns number of bits that need to be zeroed in the binary
 // representation of message length l.
-func BitsToZero(l uint64) uint64 {
+func bitsToZero(l uint64) uint64 {
 	nb := math.Ceil(math.Log2(float64(l) + 1))
 	ns := math.Ceil(math.Log2(nb)) + 1
 	//fmt.Printf("B = %f ", nb)

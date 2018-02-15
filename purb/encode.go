@@ -52,38 +52,40 @@ const ENTRYLEN = SYMKEYLEN + OFFSET_POINTER_SIZE
 // Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
 const PLACEMENT_ATTEMPTS = 3
 
-func MakePurb(data []byte, decoders []Decoder, si SuiteInfoMap, stream cipher.Stream) (*[]byte, error) {
+func MakePurb(data []byte, decoders []Decoder, infoMap SuiteInfoMap, stream cipher.Stream) ([]byte, error) {
 	// Generate payload key and global nonce. It could be passed by an application above
-	key := random.Bytes(KEYLEN, stream)
-	nonce := random.Bytes(NONCE_SIZE, stream)
+	//key := random.Bytes(KEYLEN, stream)
+	//nonce := random.Bytes(NONCE_SIZE, stream)
+	key := []byte("key16key16key16!")
+	nonce := []byte("noncenonce12")
 
 	purb, err := NewPurb(key, nonce)
 	if err != nil {
-		panic(err.Error())
+		return nil, err
 	}
-	purb.ConstructHeader(decoders, &si, stream)
+	purb.ConstructHeader(decoders, &infoMap, stream)
 	if err := purb.PadThenEncryptData(&data, stream); err != nil {
-		panic(err.Error())
+		return nil, err
 	}
-	purb.Write(&si, stream)
+	purb.Write(&infoMap, stream)
 
-	return &purb.buf, nil
+	return purb.buf, nil
 }
 
-func (p *Purb) ConstructHeader(decoders []Decoder, info *SuiteInfoMap, stream cipher.Stream) {
+func (p *Purb) ConstructHeader(decoders []Decoder, infoMap *SuiteInfoMap, stream cipher.Stream) {
 	h := NewEmptyHeader()
-	if err := h.genCornerstones(&decoders, info, stream); err != nil {
+	if err := h.genCornerstones(&decoders, infoMap, stream); err != nil {
 		panic(err)
 	}
 	if err := h.computeSharedSecrets(); err != nil {
 		panic(err)
 	}
 	h.Layout.Reset()
-	orderedSuites, err := h.locateCornerstones(info, stream)
+	orderedSuites, err := h.locateCornerstones(infoMap, stream)
 	if err != nil {
 		panic(err)
 	}
-	h.locateEntries(info, orderedSuites, stream)
+	h.locateEntries(infoMap, orderedSuites, stream)
 	//if err := h.fillEntrypoints(p.key, p.Nonce, stream); err != nil {
 	//	panic(err)
 	//}
@@ -94,7 +96,7 @@ func (p *Purb) ConstructHeader(decoders []Decoder, info *SuiteInfoMap, stream ci
 // Find what unique suits Decoders of the message use,
 // generate a private for each of these suites, and assign
 // them to corresponding entry points
-func (h *Header) genCornerstones(decoders *[]Decoder, info *SuiteInfoMap, stream cipher.Stream) error {
+func (h *Header) genCornerstones(decoders *[]Decoder, infoMap *SuiteInfoMap, stream cipher.Stream) error {
 	for _, dec := range *decoders {
 		// Add recipients to the header
 		if len(h.SuitesToEntries[dec.Suite.String()]) == 0 {
@@ -115,7 +117,7 @@ func (h *Header) genCornerstones(decoders *[]Decoder, info *SuiteInfoMap, stream
 				if pair.Secret != nil && pair.Public != nil {
 					if encode != nil {
 						log.Printf("Generated public key: %x", encode)
-						if len(encode) != (*info)[dec.Suite.String()].KeyLen {
+						if len(encode) != (*infoMap)[dec.Suite.String()].KeyLen {
 							log.Fatal("Length of elligator Encoded key is not what we expect. It's ", len(encode))
 						}
 						break
@@ -146,8 +148,11 @@ func (h *Header) computeSharedSecrets() error {
 			if ok {
 				sharedKey := e.Recipient.Suite.Point().Mul(e.Recipient.PublicKey, skey.Priv) // Compute shared DH key
 				if sharedKey != nil {
-					sharedBytes, _ := sharedKey.MarshalBinary()
-					h.SuitesToEntries[suite][i].SharedSecret = KDF(sharedBytes) // Derive a key using KDF
+					//sharedBytes, _ := sharedKey.MarshalBinary()
+					//h.SuitesToEntries[suite][i].SharedSecret = KDF(sharedBytes) // Derive a key using KDF
+					h.SuitesToEntries[suite][i].SharedSecret , _ = sharedKey.MarshalBinary()
+					//fmt.Printf("Shared secret: %x and length is %d\n", h.SuitesToEntries[suite][i].SharedSecret,
+					//	len(h.SuitesToEntries[suite][i].SharedSecret))
 				} else {
 					return errors.New("couldn't negotiate a shared DH key")
 				}
@@ -160,7 +165,7 @@ func (h *Header) computeSharedSecrets() error {
 }
 
 // Writes cornerstone values to the first available entries of the ones assigned for use ciphersuites
-func (h *Header) locateCornerstones(suiteInfo *SuiteInfoMap, stream cipher.Stream) (*[]string, error) {
+func (h *Header) locateCornerstones(infoMap *SuiteInfoMap, stream cipher.Stream) (*[]string, error) {
 	// Create two reservation layouts:
 	// - In w.layout only each ciphersuite's primary position is reserved.
 	// - In exclude we reserve _all_ positions in each ciphersuite.
@@ -185,7 +190,7 @@ func (h *Header) locateCornerstones(suiteInfo *SuiteInfoMap, stream cipher.Strea
 	})
 	orderedSuites := make([]string, 0)
 	for _, stone := range stones { // for each cornerstone
-		info := (*suiteInfo)[stone.SuiteName]
+		info := (*infoMap)[stone.SuiteName]
 		orderedSuites = append(orderedSuites, stone.SuiteName)
 		if info == nil {
 			return nil, errors.New("we do not have info about the needed suite")
@@ -221,13 +226,14 @@ func (h *Header) locateCornerstones(suiteInfo *SuiteInfoMap, stream cipher.Strea
 
 //Function that will find, place and reserve part of the header for the data
 //All hash tables start after their cornerstone.
-func (h *Header) locateEntries(suiteInfo *SuiteInfoMap, sOrder *[]string, stream cipher.Stream) {
+func (h *Header) locateEntries(infoMap *SuiteInfoMap, sOrder *[]string, stream cipher.Stream) {
 	for _, suite := range *sOrder {
 		for i, entry := range h.SuitesToEntries[suite] {
 			//initial hash table size
 			tableSize := 1
-			//hash table start right after the cornerstone
-			start := h.SuitesToCornerstone[suite].Offset + (*suiteInfo)[suite].KeyLen
+			//hash table start right after the cornerstone's offset-0
+			start := (*infoMap)[suite].Positions[0] + (*infoMap)[suite].KeyLen
+			//start := h.SuitesToCornerstone[suite].Offset + (*infoMap)[suite].KeyLen
 			located := false
 			hash := sha256.New()
 			hash.Write(entry.SharedSecret)
@@ -245,7 +251,7 @@ func (h *Header) locateEntries(suiteInfo *SuiteInfoMap, sOrder *[]string, stream
 				}
 				if located {
 					// save end of the current table as the length of the header
-					end := start + (tHash+1)*ENTRYLEN + 1
+					end := start + (tHash+1)*ENTRYLEN
 					if end > h.Length {
 						h.Length = end
 					}
@@ -253,7 +259,7 @@ func (h *Header) locateEntries(suiteInfo *SuiteInfoMap, sOrder *[]string, stream
 				} else {
 					//If we haven't located the entry, update the hash table size and start
 					//start = current hash table start + number of entries in the table* the length of each entry
-					start = start + tableSize*ENTRYLEN
+					start += tableSize*ENTRYLEN
 					tableSize *= 2
 				}
 			}
@@ -273,7 +279,7 @@ func (p *Purb) PadThenEncryptData(data *[]byte, stream cipher.Stream) error {
 }
 
 // Write writes content of entrypoints and encrypted payloads into contiguous buffer
-func (p *Purb) Write(suiteInfo *SuiteInfoMap, stream cipher.Stream) {
+func (p *Purb) Write(infoMap *SuiteInfoMap, stream cipher.Stream) {
 	// copy nonce first
 	if len(p.Nonce) != 0 {
 		msgbuf := p.growBuf(0, NONCE_SIZE)
@@ -293,6 +299,7 @@ func (p *Purb) Write(suiteInfo *SuiteInfoMap, stream cipher.Stream) {
 	// encrypt and copy entries
 	payloadOffset := make([]byte, OFFSET_POINTER_SIZE)
 	binary.BigEndian.PutUint32(payloadOffset, uint32(p.Header.Length))
+	//log.Printf("Payload starts at %d", p.Header.Length)
 	entryData := append(p.key, payloadOffset...)
 	for _, entries := range p.Header.SuitesToEntries {
 		for _, entry := range entries {
@@ -300,7 +307,7 @@ func (p *Purb) Write(suiteInfo *SuiteInfoMap, stream cipher.Stream) {
 			sec := entry.Recipient.Suite.Cipher(entry.SharedSecret)
 			msgbuf := p.growBuf(entry.Offset, entry.Offset+ENTRYLEN)
 			sec.XORKeyStream(msgbuf, entryData)
-			log.Printf("Entry content to place: %x", msgbuf)
+			//log.Printf("Entry content to place: %x", msgbuf)
 		}
 	}
 
@@ -316,18 +323,18 @@ func (p *Purb) Write(suiteInfo *SuiteInfoMap, stream cipher.Stream) {
 
 	// copy message into buffer
 	p.buf = append(p.buf, p.Payload...)
-	log.Printf("Buffer with payload: %x", p.buf)
+	//log.Printf("Buffer with payload: %x", p.buf)
 
 	// XOR each cornerstone with the data in its non-primary positions and save as the cornerstone value
 	for _, corner := range p.Header.SuitesToCornerstone {
 		keylen := len(corner.Encoded)
 		corbuf := make([]byte, keylen)
-		for _, offset := range (*suiteInfo)[corner.SuiteName].Positions {
+		for _, offset := range (*infoMap)[corner.SuiteName].Positions {
 			stop := offset+keylen
 			// check that we have data at non-primary positions to xor
 			if stop > len(p.buf) {
 				if offset > len(p.buf) {
-					continue
+					break
 				} else {
 					stop = len(p.buf)
 				}
@@ -340,7 +347,7 @@ func (p *Purb) Write(suiteInfo *SuiteInfoMap, stream cipher.Stream) {
 		// copy the result of XOR to the primary position
 		copy(p.buf[corner.Offset:corner.Offset+keylen], corbuf)
 	}
-	log.Printf("Buffer with xored: %x", p.buf)
+	//log.Printf("Buffer with xored: %x", p.buf)
 }
 
 // Encrypt the payload of the purb using freshly generated symmetric keys and AEAD.
@@ -356,7 +363,7 @@ func AEADEncrypt(data, nonce, key, additional *[]byte, stream cipher.Stream) ([]
 	}
 	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
-		panic(err.Error())
+		return nil, err
 	}
 	// Encrypt and authenticate payload
 	var enc []byte

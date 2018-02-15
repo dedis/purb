@@ -89,7 +89,7 @@ func createDecoders() []Decoder {
 	for _, suite := range suites {
 		for i := 0; i < 5; i++ {
 			pair := config.NewKeyPair(suite)
-			decs = append(decs, Decoder{suite, pair.Public})
+			decs = append(decs, Decoder{Suite: suite, PublicKey: pair.Public, PrivateKey: pair.Secret})
 		}
 	}
 	return decs
