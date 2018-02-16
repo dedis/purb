@@ -2,8 +2,8 @@ package purb
 
 import (
 	"testing"
-	"gopkg.in/dedis/crypto.v0/random"
 	"fmt"
+	"gopkg.in/dedis/crypto.v0/random"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,10 +16,10 @@ func TestDecode(t *testing.T) {
 	if err != nil {
 		panic(err.Error())
 	}
-	success, message, err := Decode(&blob, &decs[3], &si)
+	success, message, err := Decode(blob, &decs[3], si)
 	if err != nil {
 		panic(err.Error())
 	}
 	require.True(t, success)
-	require.Equal(t, data, *message)
+	require.Equal(t, data, message)
 }

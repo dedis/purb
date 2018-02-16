@@ -28,7 +28,7 @@ func TestHeader_GenCornerstones(t *testing.T) {
 	h := NewEmptyHeader()
 	decoders := createDecoders()
 	si := createInfo()
-	h.genCornerstones(&decoders, &si, random.Stream)
+	h.genCornerstones(decoders, si, random.Stream)
 	for _, stone := range h.SuitesToCornerstone {
 		//fmt.Println(hex.EncodeToString(stone.Encoded))
 		require.Equal(t, len(stone.Encoded), KEYLEN)
@@ -48,7 +48,7 @@ func TestPurb_ConstructHeader(t *testing.T) {
 	}
 	si := createInfo()
 	decs := createDecoders()
-	purb.ConstructHeader(decs, &si, random.Stream)
+	purb.ConstructHeader(decs, si, random.Stream)
 	//fmt.Println("Content of the entries:")
 	//for _, cell := range purb.Header.Layout {
 	//	fmt.Println(hex.EncodeToString(cell))
@@ -65,10 +65,10 @@ func TestPurb_Write(t *testing.T) {
 	}
 	si := createInfo()
 	decs := createDecoders()
-	purb.ConstructHeader(decs, &si, random.Stream)
+	purb.ConstructHeader(decs, si, random.Stream)
 	data := []byte("gorilla")
-	purb.PadThenEncryptData(&data, random.Stream)
-	purb.Write(&si, random.Stream)
+	purb.PadThenEncryptData(data, random.Stream)
+	purb.Write(si, random.Stream)
 }
 
 func createInfo() SuiteInfoMap {

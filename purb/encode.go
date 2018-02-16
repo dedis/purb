@@ -63,18 +63,18 @@ func MakePurb(data []byte, decoders []Decoder, infoMap SuiteInfoMap, stream ciph
 	if err != nil {
 		return nil, err
 	}
-	purb.ConstructHeader(decoders, &infoMap, stream)
-	if err := purb.PadThenEncryptData(&data, stream); err != nil {
+	purb.ConstructHeader(decoders, infoMap, stream)
+	if err := purb.PadThenEncryptData(data, stream); err != nil {
 		return nil, err
 	}
-	purb.Write(&infoMap, stream)
+	purb.Write(infoMap, stream)
 
 	return purb.buf, nil
 }
 
-func (p *Purb) ConstructHeader(decoders []Decoder, infoMap *SuiteInfoMap, stream cipher.Stream) {
+func (p *Purb) ConstructHeader(decoders []Decoder, infoMap SuiteInfoMap, stream cipher.Stream) {
 	h := NewEmptyHeader()
-	if err := h.genCornerstones(&decoders, infoMap, stream); err != nil {
+	if err := h.genCornerstones(decoders, infoMap, stream); err != nil {
 		panic(err)
 	}
 	if err := h.computeSharedSecrets(); err != nil {
@@ -96,8 +96,8 @@ func (p *Purb) ConstructHeader(decoders []Decoder, infoMap *SuiteInfoMap, stream
 // Find what unique suits Decoders of the message use,
 // generate a private for each of these suites, and assign
 // them to corresponding entry points
-func (h *Header) genCornerstones(decoders *[]Decoder, infoMap *SuiteInfoMap, stream cipher.Stream) error {
-	for _, dec := range *decoders {
+func (h *Header) genCornerstones(decoders []Decoder, infoMap SuiteInfoMap, stream cipher.Stream) error {
+	for _, dec := range decoders {
 		// Add recipients to the header
 		if len(h.SuitesToEntries[dec.Suite.String()]) == 0 {
 			entries := make([]*Entry, 1)
@@ -117,7 +117,7 @@ func (h *Header) genCornerstones(decoders *[]Decoder, infoMap *SuiteInfoMap, str
 				if pair.Secret != nil && pair.Public != nil {
 					if encode != nil {
 						log.Printf("Generated public key: %x", encode)
-						if len(encode) != (*infoMap)[dec.Suite.String()].KeyLen {
+						if len(encode) != infoMap[dec.Suite.String()].KeyLen {
 							log.Fatal("Length of elligator Encoded key is not what we expect. It's ", len(encode))
 						}
 						break
@@ -165,7 +165,7 @@ func (h *Header) computeSharedSecrets() error {
 }
 
 // Writes cornerstone values to the first available entries of the ones assigned for use ciphersuites
-func (h *Header) locateCornerstones(infoMap *SuiteInfoMap, stream cipher.Stream) (*[]string, error) {
+func (h *Header) locateCornerstones(infoMap SuiteInfoMap, stream cipher.Stream) ([]string, error) {
 	// Create two reservation layouts:
 	// - In w.layout only each ciphersuite's primary position is reserved.
 	// - In exclude we reserve _all_ positions in each ciphersuite.
@@ -190,7 +190,7 @@ func (h *Header) locateCornerstones(infoMap *SuiteInfoMap, stream cipher.Stream)
 	})
 	orderedSuites := make([]string, 0)
 	for _, stone := range stones { // for each cornerstone
-		info := (*infoMap)[stone.SuiteName]
+		info := infoMap[stone.SuiteName]
 		orderedSuites = append(orderedSuites, stone.SuiteName)
 		if info == nil {
 			return nil, errors.New("we do not have info about the needed suite")
@@ -221,18 +221,18 @@ func (h *Header) locateCornerstones(infoMap *SuiteInfoMap, stream cipher.Stream)
 			panic("thought we had that position reserved??")
 		}
 	}
-	return &orderedSuites, nil
+	return orderedSuites, nil
 }
 
 //Function that will find, place and reserve part of the header for the data
 //All hash tables start after their cornerstone.
-func (h *Header) locateEntries(infoMap *SuiteInfoMap, sOrder *[]string, stream cipher.Stream) {
-	for _, suite := range *sOrder {
+func (h *Header) locateEntries(infoMap SuiteInfoMap, sOrder []string, stream cipher.Stream) {
+	for _, suite := range sOrder {
 		for i, entry := range h.SuitesToEntries[suite] {
 			//initial hash table size
 			tableSize := 1
 			//hash table start right after the cornerstone's offset-0
-			start := (*infoMap)[suite].Positions[0] + (*infoMap)[suite].KeyLen
+			start := infoMap[suite].Positions[0] + infoMap[suite].KeyLen
 			//start := h.SuitesToCornerstone[suite].Offset + (*infoMap)[suite].KeyLen
 			located := false
 			hash := sha256.New()
@@ -267,10 +267,10 @@ func (h *Header) locateEntries(infoMap *SuiteInfoMap, sOrder *[]string, stream c
 	}
 }
 
-func (p *Purb) PadThenEncryptData(data *[]byte, stream cipher.Stream) error {
+func (p *Purb) PadThenEncryptData(data []byte, stream cipher.Stream) error {
 	var err error
 	paddedData := padding.Pad(data, p.Header.Length+MAC_SIZE)
-	p.Payload, err = AEADEncrypt(&paddedData, &p.Nonce, &p.key, nil, stream)
+	p.Payload, err = AEADEncrypt(paddedData, p.Nonce, p.key, nil, stream)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -279,7 +279,7 @@ func (p *Purb) PadThenEncryptData(data *[]byte, stream cipher.Stream) error {
 }
 
 // Write writes content of entrypoints and encrypted payloads into contiguous buffer
-func (p *Purb) Write(infoMap *SuiteInfoMap, stream cipher.Stream) {
+func (p *Purb) Write(infoMap SuiteInfoMap, stream cipher.Stream) {
 	// copy nonce first
 	if len(p.Nonce) != 0 {
 		msgbuf := p.growBuf(0, NONCE_SIZE)
@@ -329,7 +329,7 @@ func (p *Purb) Write(infoMap *SuiteInfoMap, stream cipher.Stream) {
 	for _, corner := range p.Header.SuitesToCornerstone {
 		keylen := len(corner.Encoded)
 		corbuf := make([]byte, keylen)
-		for _, offset := range (*infoMap)[corner.SuiteName].Positions {
+		for _, offset := range infoMap[corner.SuiteName].Positions {
 			stop := offset+keylen
 			// check that we have data at non-primary positions to xor
 			if stop > len(p.buf) {
@@ -352,12 +352,12 @@ func (p *Purb) Write(infoMap *SuiteInfoMap, stream cipher.Stream) {
 
 // Encrypt the payload of the purb using freshly generated symmetric keys and AEAD.
 // Payload is encrypted as many times as there are distinct cornerstone values (corresponding cipher suites used).
-func AEADEncrypt(data, nonce, key, additional *[]byte, stream cipher.Stream) ([]byte, error) {
+func AEADEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]byte, error) {
 	// Generate a random 16-byte key and create a cipher from it
 	if key == nil {
-		*key = random.Bytes(KEYLEN, stream)
+		key = random.Bytes(KEYLEN, stream)
 	}
-	block, err := aes.NewCipher(*key)
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
@@ -367,11 +367,7 @@ func AEADEncrypt(data, nonce, key, additional *[]byte, stream cipher.Stream) ([]
 	}
 	// Encrypt and authenticate payload
 	var enc []byte
-	if additional != nil {
-		enc = aesgcm.Seal(nil, *nonce, *data, *additional) // additional can be nil
-	} else {
-		enc = aesgcm.Seal(nil, *nonce, *data, []byte{}) // additional can be nil
-	}
+	enc = aesgcm.Seal(nil, nonce, data, additional) // additional can be nil
 
 	return enc, nil
 }
