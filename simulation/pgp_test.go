@@ -5,6 +5,7 @@ import (
 
 	"gopkg.in/dedis/onet.v1/log"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"fmt"
 )
 
@@ -16,17 +17,23 @@ func TestNewPGP(t *testing.T) {
 	assert.NotEqual(t, pgp.ArmorPublic(), pgp2.ArmorPublic())
 }
 
-func TestPGP_Encrypt(t *testing.T) {
+func TestPGP_EncryptDecrypt(t *testing.T) {
 	msg := []byte("gorilla")
-	pgp := NewPGP()
+	sender := NewPGP()
+	recipients := make([]*PGP, 0)
+	for i:=0; i<100; i++ {
+		recipients = append(recipients, NewPGP())
+	}
 	//pgp2 := NewECDHPublic(pgp.Public)
-	pgp2 := pgp
-	recipients := make([]*PGP, 1)
-	recipients[0] = pgp2
-	result, err := pgp.Encrypt(msg, recipients)
+	enc, err := sender.Encrypt(msg, recipients)
 	if err != nil {
 		log.ErrFatal(err)
 	}
-	fmt.Printf("Result is %x", result)
-
+	fmt.Printf("Encryption:\n%s\n", sender.ArmorEncryption(enc))
+	dec, err := recipients[len(recipients)-1].Decrypt(enc)
+	if err != nil {
+		log.Fatal(err)
+	}
+	require.Equal(t, msg, dec)
+	//fmt.Printf("Decrypted:\n%s\n", dec)
 }

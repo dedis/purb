@@ -38,13 +38,13 @@ func NewPGP() *PGP {
 	}
 }
 
-func NewPGPPublic(public string) *PGP {
-	return &PGP{Public: DecodePublic(public)}
-}
-
-func NewECDHPublic(public *packet.PublicKey) *PGP {
-	return &PGP{Public: public}
-}
+//func NewPGPPublic(public string) *PGP {
+//	return &PGP{Public: DecodePublic(public)}
+//}
+//
+//func NewECDHPublic(public *packet.PublicKey) *PGP {
+//	return &PGP{Public: public}
+//}
 
 func (p *PGP) Encrypt(plaintext []byte, recipients []*PGP) ([]byte, error) {
 	if len(recipients) == 0 {
@@ -65,7 +65,16 @@ func (p *PGP) Encrypt(plaintext []byte, recipients []*PGP) ([]byte, error) {
 }
 
 func (p *PGP) Decrypt(data []byte) ([]byte, error) {
-	return nil, nil
+	r := bytes.NewReader(data)
+	kr := openpgp.EntityList{p.Entity()}
+	msgd, err := openpgp.ReadMessage(r, kr, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	out := &bytes.Buffer{}
+	out.ReadFrom(msgd.UnverifiedBody)
+	//fmt.Printf("Message for keyIDs %x\n", msgd.EncryptedToKeyIds)
+	return out.Bytes(), nil
 }
 
 func (p *PGP) Sign(data []byte) (string, error) {
@@ -103,6 +112,16 @@ func (p *PGP) Verify(data []byte, sigStr string) error {
 	hash.Write(data)
 
 	return p.Public.VerifySignature(hash, sig)
+}
+
+
+func (p *PGP) ArmorEncryption(enc []byte) string {
+	arm := &bytes.Buffer{}
+	wArm, err := armor.Encode(arm, "Message", make(map[string]string))
+	log.ErrFatal(err)
+	wArm.Write(enc)
+	log.ErrFatal(wArm.Close())
+	return arm.String()
 }
 
 func (p *PGP) ArmorPrivate() string {
