@@ -38,24 +38,31 @@ const KEYLEN = 32
 const SYMKEYLEN = 16
 
 // Length of offset pointer
-const OFFSET_POINTER_SIZE = 4
+const OFFSET_POINTER_LEN = 4
 
 // Length of a Nonce for AEAD in bytes
-const NONCE_SIZE = 12
+const NONCE_LEN = 12
 
 // Lenght of authentication tag
-const MAC_SIZE = SYMKEYLEN
+const MAC_LEN = SYMKEYLEN
 
 //Length of an entrypoint including encryption key and location of payload start
-const ENTRYLEN = SYMKEYLEN + OFFSET_POINTER_SIZE
+//const ENTRYLEN = SYMKEYLEN + OFFSET_POINTER_LEN
 
 // Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
 const PLACEMENT_ATTEMPTS = 3
 
-func MakePurb(data []byte, decoders []Decoder, infoMap SuiteInfoMap, stream cipher.Stream) ([]byte, error) {
+// Approaches to wrap a symmetric key
+const (
+	STREAM = iota
+	AEAD
+	AES
+)
+
+func MakePurb(data []byte, decoders []Decoder, infoMap SuiteInfoMap, keywrap int, simplified bool, stream cipher.Stream) ([]byte, error) {
 	// Generate payload key and global nonce. It could be passed by an application above
 	//key := random.Bytes(KEYLEN, stream)
-	//nonce := random.Bytes(NONCE_SIZE, stream)
+	//nonce := random.Bytes(NONCE_LEN, stream)
 	key := []byte("key16key16key16!")
 	nonce := []byte("noncenonce12")
 
@@ -63,17 +70,23 @@ func MakePurb(data []byte, decoders []Decoder, infoMap SuiteInfoMap, stream ciph
 	if err != nil {
 		return nil, err
 	}
-	purb.ConstructHeader(decoders, infoMap, stream)
+	purb.ConstructHeader(decoders, infoMap, keywrap, simplified, stream)
 	if err := purb.PadThenEncryptData(data, stream); err != nil {
 		return nil, err
 	}
-	purb.Write(infoMap, stream)
+	purb.Write(infoMap, keywrap, stream)
 
 	return purb.buf, nil
 }
 
-func (p *Purb) ConstructHeader(decoders []Decoder, infoMap SuiteInfoMap, stream cipher.Stream) {
+func (p *Purb) ConstructHeader(decoders []Decoder, infoMap SuiteInfoMap, keywrap int, simplified bool, stream cipher.Stream) {
 	h := NewEmptyHeader()
+	switch keywrap {
+	case STREAM:
+		h.EntryLen = SYMKEYLEN + OFFSET_POINTER_LEN
+	case AEAD:
+		h.EntryLen = SYMKEYLEN + OFFSET_POINTER_LEN + MAC_LEN
+	}
 	if err := h.genCornerstones(decoders, infoMap, stream); err != nil {
 		panic(err)
 	}
@@ -85,7 +98,7 @@ func (p *Purb) ConstructHeader(decoders []Decoder, infoMap SuiteInfoMap, stream 
 	if err != nil {
 		panic(err)
 	}
-	h.locateEntries(infoMap, orderedSuites, stream)
+	h.locateEntries(infoMap, orderedSuites, simplified, stream)
 	//if err := h.fillEntrypoints(p.key, p.Nonce, stream); err != nil {
 	//	panic(err)
 	//}
@@ -116,7 +129,7 @@ func (h *Header) genCornerstones(decoders []Decoder, infoMap SuiteInfoMap, strea
 				encode = pair.Public.(abstract.Hiding).HideEncode(stream)
 				if pair.Secret != nil && pair.Public != nil {
 					if encode != nil {
-						log.Printf("Generated public key: %x", encode)
+						//log.Printf("Generated public key: %x", encode)
 						if len(encode) != infoMap[dec.Suite.String()].KeyLen {
 							log.Fatal("Length of elligator Encoded key is not what we expect. It's ", len(encode))
 						}
@@ -150,7 +163,7 @@ func (h *Header) computeSharedSecrets() error {
 				if sharedKey != nil {
 					//sharedBytes, _ := sharedKey.MarshalBinary()
 					//h.SuitesToEntries[suite][i].SharedSecret = KDF(sharedBytes) // Derive a key using KDF
-					h.SuitesToEntries[suite][i].SharedSecret , _ = sharedKey.MarshalBinary()
+					h.SuitesToEntries[suite][i].SharedSecret, _ = sharedKey.MarshalBinary()
 					//fmt.Printf("Shared secret: %x and length is %d\n", h.SuitesToEntries[suite][i].SharedSecret,
 					//	len(h.SuitesToEntries[suite][i].SharedSecret))
 				} else {
@@ -177,8 +190,8 @@ func (h *Header) locateCornerstones(infoMap SuiteInfoMap, stream cipher.Stream) 
 	exclude.Reset()
 
 	// Place a nonce for AEAD first at the beginning of purb
-	exclude.Reserve(0, NONCE_SIZE, true, "nonce")
-	h.Layout.Reserve(0, NONCE_SIZE, true, "nonce")
+	exclude.Reserve(0, NONCE_LEN, true, "nonce")
+	h.Layout.Reserve(0, NONCE_LEN, true, "nonce")
 
 	stones := make([]*Cornerstone, 0)
 	for _, stone := range h.SuitesToCornerstone {
@@ -216,7 +229,7 @@ func (h *Header) locateCornerstones(infoMap SuiteInfoMap, stream cipher.Stream) 
 		if high > h.Length {
 			h.Length = high // +1 because bytes are counted from 0
 		}
-		log.Printf("reserving [%d-%d] for suite %s\n", low, high, stone.SuiteName)
+		//log.Printf("reserving [%d-%d] for suite %s\n", low, high, stone.SuiteName)
 		if !h.Layout.Reserve(low, high, true, stone.SuiteName) {
 			panic("thought we had that position reserved??")
 		}
@@ -226,50 +239,66 @@ func (h *Header) locateCornerstones(infoMap SuiteInfoMap, stream cipher.Stream) 
 
 //Function that will find, place and reserve part of the header for the data
 //All hash tables start after their cornerstone.
-func (h *Header) locateEntries(infoMap SuiteInfoMap, sOrder []string, stream cipher.Stream) {
+func (h *Header) locateEntries(infoMap SuiteInfoMap, sOrder []string, simplified bool, stream cipher.Stream) {
 	for _, suite := range sOrder {
 		for i, entry := range h.SuitesToEntries[suite] {
-			//initial hash table size
-			tableSize := 1
 			//hash table start right after the cornerstone's offset-0
 			start := infoMap[suite].Positions[0] + infoMap[suite].KeyLen
-			//start := h.SuitesToCornerstone[suite].Offset + (*infoMap)[suite].KeyLen
-			located := false
-			hash := sha256.New()
-			hash.Write(entry.SharedSecret)
-			absPos := int(binary.BigEndian.Uint32(hash.Sum(nil))) // Large number to become a position
-			var tHash int
-			for {
-				for j := 0; j < PLACEMENT_ATTEMPTS; j++ {
-					tHash = (absPos + j) % tableSize
-					if h.Layout.Reserve(start+tHash*ENTRYLEN, start+(tHash+1)*ENTRYLEN, true, "hash"+strconv.Itoa(tableSize)) {
-						h.SuitesToEntries[suite][i].Offset = start + tHash*ENTRYLEN
-						located = true
-						log.Printf("Placing entry at [%d-%d]", start+tHash*ENTRYLEN, start+(tHash+1)*ENTRYLEN)
+			if !simplified {
+				//initial hash table size
+				tableSize := 1
+				located := false
+				hash := sha256.New()
+				hash.Write(entry.SharedSecret)
+				absPos := int(binary.BigEndian.Uint32(hash.Sum(nil))) // Large number to become a position
+				var tHash int
+				for {
+					for j := 0; j < PLACEMENT_ATTEMPTS; j++ {
+						tHash = (absPos + j) % tableSize
+						if h.Layout.Reserve(start+tHash*h.EntryLen, start+(tHash+1)*h.EntryLen, true, "hash"+strconv.Itoa(tableSize)) {
+							h.SuitesToEntries[suite][i].Offset = start + tHash*h.EntryLen
+							located = true
+							//log.Printf("Placing entry at [%d-%d]", start+tHash*ENTRYLEN, start+(tHash+1)*ENTRYLEN)
+							break
+						}
+					}
+					if located {
+						// save end of the current table as the length of the header
+						end := start + (tHash+1)*h.EntryLen
+						if end > h.Length {
+							h.Length = end
+						}
 						break
+					} else {
+						//If we haven't located the entry, update the hash table size and start
+						//start = current hash table start + number of entries in the table* the length of each entry
+						start += tableSize * h.EntryLen
+						tableSize *= 2
 					}
 				}
-				if located {
-					// save end of the current table as the length of the header
-					end := start + (tHash+1)*ENTRYLEN
-					if end > h.Length {
-						h.Length = end
+			} else { // simplified layout without hash tables
+				for {
+					if h.Layout.Reserve(start, start+h.EntryLen, true, "hash"+strconv.Itoa(start)) {
+						h.SuitesToEntries[suite][i].Offset = start
+						end := start + h.EntryLen
+						if end > h.Length {
+							h.Length = end
+						}
+						//log.Printf("Placing entry at [%d-%d]", start, start+h.EntryLen)
+						break
+					} else {
+						start += h.EntryLen
 					}
-					break
-				} else {
-					//If we haven't located the entry, update the hash table size and start
-					//start = current hash table start + number of entries in the table* the length of each entry
-					start += tableSize*ENTRYLEN
-					tableSize *= 2
 				}
 			}
 		}
+
 	}
 }
 
 func (p *Purb) PadThenEncryptData(data []byte, stream cipher.Stream) error {
 	var err error
-	paddedData := padding.Pad(data, p.Header.Length+MAC_SIZE)
+	paddedData := padding.Pad(data, p.Header.Length+MAC_LEN)
 	p.Payload, err = AEADEncrypt(paddedData, p.Nonce, p.key, nil, stream)
 	if err != nil {
 		log.Fatalln(err)
@@ -279,10 +308,10 @@ func (p *Purb) PadThenEncryptData(data []byte, stream cipher.Stream) error {
 }
 
 // Write writes content of entrypoints and encrypted payloads into contiguous buffer
-func (p *Purb) Write(infoMap SuiteInfoMap, stream cipher.Stream) {
+func (p *Purb) Write(infoMap SuiteInfoMap, keywrap int, stream cipher.Stream) {
 	// copy nonce first
 	if len(p.Nonce) != 0 {
-		msgbuf := p.growBuf(0, NONCE_SIZE)
+		msgbuf := p.growBuf(0, NONCE_LEN)
 		copy(msgbuf, p.Nonce)
 	}
 	//dummy := make([]byte, 0)
@@ -297,16 +326,22 @@ func (p *Purb) Write(infoMap SuiteInfoMap, stream cipher.Stream) {
 	}
 
 	// encrypt and copy entries
-	payloadOffset := make([]byte, OFFSET_POINTER_SIZE)
+	payloadOffset := make([]byte, OFFSET_POINTER_LEN)
 	binary.BigEndian.PutUint32(payloadOffset, uint32(p.Header.Length))
 	//log.Printf("Payload starts at %d", p.Header.Length)
 	entryData := append(p.key, payloadOffset...)
 	for _, entries := range p.Header.SuitesToEntries {
 		for _, entry := range entries {
-			// we use shared secret as a seed to a stream cipher
-			sec := entry.Recipient.Suite.Cipher(entry.SharedSecret)
-			msgbuf := p.growBuf(entry.Offset, entry.Offset+ENTRYLEN)
-			sec.XORKeyStream(msgbuf, entryData)
+			switch keywrap {
+			case STREAM:
+				// we use shared secret as a seed to a stream cipher
+				sec := entry.Recipient.Suite.Cipher(entry.SharedSecret)
+				msgbuf := p.growBuf(entry.Offset, entry.Offset+p.Header.EntryLen)
+				sec.XORKeyStream(msgbuf, entryData)
+			case AEAD:
+
+			}
+
 			//log.Printf("Entry content to place: %x", msgbuf)
 		}
 	}
@@ -330,7 +365,7 @@ func (p *Purb) Write(infoMap SuiteInfoMap, stream cipher.Stream) {
 		keylen := len(corner.Encoded)
 		corbuf := make([]byte, keylen)
 		for _, offset := range infoMap[corner.SuiteName].Positions {
-			stop := offset+keylen
+			stop := offset + keylen
 			// check that we have data at non-primary positions to xor
 			if stop > len(p.buf) {
 				if offset > len(p.buf) {
@@ -340,7 +375,7 @@ func (p *Purb) Write(infoMap SuiteInfoMap, stream cipher.Stream) {
 				}
 			}
 			tmp := p.buf[offset:stop]
-			for b:=0; b<keylen; b++ {
+			for b := 0; b < keylen; b++ {
 				corbuf[b] ^= tmp[b]
 			}
 		}
@@ -409,7 +444,7 @@ func NewEmptyHeader() *Header {
 }
 
 func NewPurb(key []byte, nonce []byte) (*Purb, error) {
-	if len(nonce) != NONCE_SIZE {
+	if len(nonce) != NONCE_LEN {
 		return nil, errors.New("incorrect nonce size")
 	}
 	if len(key) != SYMKEYLEN {

@@ -11,12 +11,12 @@ import (
 
 	"gopkg.in/dedis/onet.v1/log"
 
-	"github.com/benburkert/openpgp/ecdh"
-	"github.com/benburkert/openpgp/packet"
-	"github.com/benburkert/openpgp"
-	"github.com/benburkert/openpgp/armor"
-	"github.com/benburkert/openpgp/algorithm"
-	"github.com/benburkert/openpgp/encoding"
+	"github.com/nikirill/openpgp/ecdh"
+	"github.com/nikirill/openpgp/packet"
+	"github.com/nikirill/openpgp"
+	"github.com/nikirill/openpgp/armor"
+	"github.com/nikirill/openpgp/algorithm"
+	"github.com/nikirill/openpgp/encoding"
 )
 
 /*
@@ -46,7 +46,7 @@ func NewPGP() *PGP {
 //	return &PGP{Public: public}
 //}
 
-func (p *PGP) Encrypt(plaintext []byte, recipients []*PGP) ([]byte, error) {
+func (p *PGP) Encrypt(plaintext []byte, recipients []*PGP, hidden bool) ([]byte, error) {
 	if len(recipients) == 0 {
 		return nil, errors.New("no recipients given")
 	}
@@ -55,7 +55,7 @@ func (p *PGP) Encrypt(plaintext []byte, recipients []*PGP) ([]byte, error) {
 	for _, r := range recipients {
 		entities = append(entities, r.Entity())
 	}
-	in, err := openpgp.Encrypt(out, entities, nil, nil, nil)
+	in, err := openpgp.Encrypt(out, entities, hidden, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}

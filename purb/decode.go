@@ -11,11 +11,18 @@ import (
 	"github.com/nikirill/purbs/padding"
 )
 
-func Decode(blob []byte, dec *Decoder, infoMap SuiteInfoMap) (bool, []byte, error) {
+func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap SuiteInfoMap) (bool, []byte, error) {
 	suite := dec.Suite
 	info := infoMap[suite.String()]
 	if info == nil {
 		return false, nil, errors.New("no positions info for this suite")
+	}
+	var ENTRYLEN int
+	switch keywrap {
+	case STREAM:
+		ENTRYLEN = SYMKEYLEN + OFFSET_POINTER_LEN
+	case AEAD:
+		ENTRYLEN = SYMKEYLEN + OFFSET_POINTER_LEN + MAC_LEN
 	}
 	// XOR all the possible suite positions to computer the cornerstone value
 	cornerstone := make([]byte, info.KeyLen)
@@ -44,37 +51,63 @@ func Decode(blob []byte, dec *Decoder, infoMap SuiteInfoMap) (bool, []byte, erro
 
 	// Now we try to decrypt all possible entries and check if the decrypted key works for AEAD of payload
 	var message []byte
-	tableSize := 1
 	start := info.Positions[0] + info.KeyLen
 	found := false
-	hash := sha256.New()
-	hash.Write(sharedSecret)
-	absPos := int(binary.BigEndian.Uint32(hash.Sum(nil))) // Large number to become a position
-	var tHash int
-	for start+(tHash+1)*ENTRYLEN < len(blob) {
-		for j := 0; j < PLACEMENT_ATTEMPTS; j++ {
-			tHash = (absPos + j) % tableSize
-			sec := suite.Cipher(sharedSecret)
-			decrypted := make([]byte, ENTRYLEN)
-			sec.XORKeyStream(decrypted, blob[start+tHash*ENTRYLEN:start+(tHash+1)*ENTRYLEN])
-			found, message = verifyDecryption(decrypted, blob)
+	if !simplified {
+		tableSize := 1
+		hash := sha256.New()
+		hash.Write(sharedSecret)
+		absPos := int(binary.BigEndian.Uint32(hash.Sum(nil))) // Large number to become a position
+		var tHash int
+		for start+(tHash+1)*ENTRYLEN < len(blob) {
+			for j := 0; j < PLACEMENT_ATTEMPTS; j++ {
+				tHash = (absPos + j) % tableSize
+				switch keywrap {
+				case STREAM:
+					sec := suite.Cipher(sharedSecret)
+					decrypted := make([]byte, ENTRYLEN)
+					sec.XORKeyStream(decrypted, blob[start+tHash*ENTRYLEN:start+(tHash+1)*ENTRYLEN])
+					found, message = verifyDecryption(decrypted, blob)
+				case AEAD:
+				case AES:
+				}
+
+				if found {
+					return found, message, nil
+				}
+			}
+			start += tableSize * ENTRYLEN
+			tableSize *= 2
+		}
+	} else {
+		for start+ENTRYLEN < len(blob) {
+			switch keywrap {
+			case STREAM:
+				sec := suite.Cipher(sharedSecret)
+				decrypted := make([]byte, ENTRYLEN)
+				sec.XORKeyStream(decrypted, blob[start:start+ENTRYLEN])
+				found, message = verifyDecryption(decrypted, blob)
+			case AEAD:
+			case AES:
+			}
 			if found {
 				return found, message, nil
 			}
+			start += ENTRYLEN
 		}
-		start += tableSize * ENTRYLEN
-		tableSize *= 2
 	}
 
 	return false, nil, nil
 }
 
 func verifyDecryption(decrypted []byte, blob []byte) (bool, []byte) {
-	msgStart := int(binary.BigEndian.Uint32(decrypted[SYMKEYLEN:SYMKEYLEN+OFFSET_POINTER_SIZE]))
+	var result bool
+	msgStart := int(binary.BigEndian.Uint32(decrypted[SYMKEYLEN:SYMKEYLEN+OFFSET_POINTER_LEN]))
 	//log.Println("Start of the message ", msgStart)
 	if msgStart > len(blob) {
 		return false, nil
 	}
+	log.Println("Start of the message ", msgStart)
 	//log.Println("Key ", decrypted[:SYMKEYLEN])
 	key := decrypted[:SYMKEYLEN]
 	block, err := aes.NewCipher(key)
@@ -85,14 +118,14 @@ func verifyDecryption(decrypted []byte, blob []byte) (bool, []byte) {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	msg, err := aesgcm.Open(nil, blob[:NONCE_SIZE], blob[msgStart:], nil)
-	if err != nil {
-		panic(err.Error())
+	msg, err := aesgcm.Open(nil, blob[:NONCE_LEN], blob[msgStart:], nil)
+	if err == nil {
+		result = true
 	}
 	if len(msg) != 0 {
 		msg = padding.UnPad(msg)
-		return true, msg
+		return result, msg
 	} else {
-		return false, nil
+		return result, nil
 	}
 }

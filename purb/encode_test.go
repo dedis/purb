@@ -26,7 +26,7 @@ func TestHeader_GenCornerstones(t *testing.T) {
 	fmt.Println("=================TEST Generate Cornerstones=================")
 	//info := createInfo()
 	h := NewEmptyHeader()
-	decoders := createDecoders()
+	decoders := createDecoders(5)
 	si := createInfo()
 	h.genCornerstones(decoders, si, random.Stream)
 	for _, stone := range h.SuitesToCornerstone {
@@ -47,8 +47,8 @@ func TestPurb_ConstructHeader(t *testing.T) {
 		panic(err.Error())
 	}
 	si := createInfo()
-	decs := createDecoders()
-	purb.ConstructHeader(decs, si, random.Stream)
+	decs := createDecoders(5)
+	purb.ConstructHeader(decs, si, STREAM, false, random.Stream)
 	//fmt.Println("Content of the entries:")
 	//for _, cell := range purb.Header.Layout {
 	//	fmt.Println(hex.EncodeToString(cell))
@@ -64,11 +64,21 @@ func TestPurb_Write(t *testing.T) {
 		panic(err.Error())
 	}
 	si := createInfo()
-	decs := createDecoders()
-	purb.ConstructHeader(decs, si, random.Stream)
+	decs := createDecoders(5)
 	data := []byte("gorilla")
+	// Normal
+	purb.ConstructHeader(decs, si, STREAM, false, random.Stream)
 	purb.PadThenEncryptData(data, random.Stream)
-	purb.Write(si, random.Stream)
+	purb.Write(si, STREAM, random.Stream)
+	// Simplified
+	purb, err = NewPurb([]byte(key), []byte(nonce))
+	if err != nil {
+		panic(err.Error())
+	}
+	purb.ConstructHeader(decs, si, STREAM, true, random.Stream)
+	purb.PadThenEncryptData(data, random.Stream)
+	purb.Write(si, STREAM, random.Stream)
+
 }
 
 func createInfo() SuiteInfoMap {
@@ -82,12 +92,12 @@ func createInfo() SuiteInfoMap {
 	return info
 }
 
-func createDecoders() []Decoder {
-	var decs []Decoder
+func createDecoders(n int) []Decoder {
+	decs := make([]Decoder, 0)
 	//suites := []abstract.Suite{edwards.NewAES128SHA256Ed25519(true), ed25519.NewAES128SHA256Ed25519(true)}
 	suites := []abstract.Suite{edwards.NewAES128SHA256Ed25519(true)}
 	for _, suite := range suites {
-		for i := 0; i < 5; i++ {
+		for i := 0; i < n; i++ {
 			pair := config.NewKeyPair(suite)
 			decs = append(decs, Decoder{Suite: suite, PublicKey: pair.Public, PrivateKey: pair.Secret})
 		}

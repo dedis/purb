@@ -6,7 +6,6 @@ import (
 	"gopkg.in/dedis/onet.v1/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"fmt"
 )
 
 func TestNewPGP(t *testing.T) {
@@ -24,16 +23,27 @@ func TestPGP_EncryptDecrypt(t *testing.T) {
 	for i:=0; i<100; i++ {
 		recipients = append(recipients, NewPGP())
 	}
-	//pgp2 := NewECDHPublic(pgp.Public)
-	enc, err := sender.Encrypt(msg, recipients)
+	// Normal PGP
+	enc, err := sender.Encrypt(msg, recipients, false)
 	if err != nil {
 		log.ErrFatal(err)
 	}
-	fmt.Printf("Encryption:\n%s\n", sender.ArmorEncryption(enc))
+	//fmt.Printf("Encryption:\n%s\n", sender.ArmorEncryption(enc))
 	dec, err := recipients[len(recipients)-1].Decrypt(enc)
 	if err != nil {
 		log.Fatal(err)
 	}
 	require.Equal(t, msg, dec)
-	//fmt.Printf("Decrypted:\n%s\n", dec)
+
+	// Hidden recipients
+	enc, err = sender.Encrypt(msg, recipients, true)
+	if err != nil {
+		log.ErrFatal(err)
+	}
+	//fmt.Printf("Encryption:\n%s\n", sender.ArmorEncryption(enc))
+	dec, err = recipients[len(recipients)-1].Decrypt(enc)
+	if err != nil {
+		log.Fatal(err)
+	}
+	require.Equal(t, msg, dec)
 }
