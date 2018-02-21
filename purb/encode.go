@@ -49,9 +49,6 @@ const MAC_LEN = SYMKEYLEN
 //Length of an entrypoint including encryption key and location of payload start
 //const ENTRYLEN = SYMKEYLEN + OFFSET_POINTER_LEN
 
-// Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
-const PLACEMENT_ATTEMPTS = 3
-
 // Approaches to wrap a symmetric key
 const (
 	STREAM = iota
@@ -59,12 +56,15 @@ const (
 	AES
 )
 
+// Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
+var PLACEMENT_ATTEMPTS = 3
+
 func MakePurb(data []byte, decoders []Decoder, infoMap SuiteInfoMap, keywrap int, simplified bool, stream cipher.Stream) ([]byte, error) {
 	// Generate payload key and global nonce. It could be passed by an application above
-	//key := random.Bytes(KEYLEN, stream)
-	//nonce := random.Bytes(NONCE_LEN, stream)
-	key := []byte("key16key16key16!")
-	nonce := []byte("noncenonce12")
+	key := random.Bytes(SYMKEYLEN, stream)
+	nonce := random.Bytes(NONCE_LEN, stream)
+	//key := []byte("key16key16key16!")
+	//nonce := []byte("noncenonce12")
 
 	purb, err := NewPurb(key, nonce)
 	if err != nil {
@@ -99,9 +99,6 @@ func (p *Purb) ConstructHeader(decoders []Decoder, infoMap SuiteInfoMap, keywrap
 		panic(err)
 	}
 	h.locateEntries(infoMap, orderedSuites, simplified, stream)
-	//if err := h.fillEntrypoints(p.key, p.Nonce, stream); err != nil {
-	//	panic(err)
-	//}
 
 	p.Header = h
 }
