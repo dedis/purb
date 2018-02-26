@@ -127,7 +127,7 @@ func (sl *SkipLayout) Reserve(lo, hi int, excl bool, name string) bool {
 		if lo >= inshi {
 			panic("trying to insert empty reservation")
 		}
-		//fmt.Printf("inserting [%d-%d]\n", low,high)
+		//log.Printf("Skip inserting [%d-%d]\n", lo, hi)
 
 		// Insert a new reservation here, then skip past it.
 		pos = sl.insert(pos, lo, inshi, name)
@@ -172,6 +172,7 @@ func (sl *SkipLayout) scanFree(f func(int, int), max int) {
 			break // no more reservations
 		}
 		if suc.low > ofs {
+			//log.Printf("The zone to random [%d-%d]\n", ofs, suc.low)
 			f(ofs, suc.low)
 		}
 		sl.skip(pos, suc)

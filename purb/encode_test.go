@@ -8,6 +8,7 @@ import (
 	"gopkg.in/dedis/crypto.v0/config"
 	"github.com/stretchr/testify/require"
 	"fmt"
+	"math"
 )
 
 //func TestPurb_EncryptPayload(t *testing.T) {
@@ -26,8 +27,8 @@ func TestHeader_GenCornerstones(t *testing.T) {
 	fmt.Println("=================TEST Generate Cornerstones=================")
 	//info := createInfo()
 	h := NewEmptyHeader()
-	decoders := createDecoders(5)
-	si := createInfo()
+	si := createInfo(3)
+	decoders := createDecoders(6, si)
 	h.genCornerstones(decoders, si, random.Stream)
 	for _, stone := range h.SuitesToCornerstone {
 		//fmt.Println(hex.EncodeToString(stone.Encoded))
@@ -46,8 +47,8 @@ func TestPurb_ConstructHeader(t *testing.T) {
 	if err != nil {
 		panic(err.Error())
 	}
-	si := createInfo()
-	decs := createDecoders(5)
+	si := createInfo(3)
+	decs := createDecoders(6, si)
 	purb.ConstructHeader(decs, si, STREAM, false, random.Stream)
 	//fmt.Println("Content of the entries:")
 	//for _, cell := range purb.Header.Layout {
@@ -63,8 +64,8 @@ func TestPurb_Write(t *testing.T) {
 	if err != nil {
 		panic(err.Error())
 	}
-	si := createInfo()
-	decs := createDecoders(5)
+	si := createInfo(3)
+	decs := createDecoders(6, si)
 	data := []byte("gorilla")
 	// Normal
 	purb.ConstructHeader(decs, si, STREAM, false, random.Stream)
@@ -81,25 +82,43 @@ func TestPurb_Write(t *testing.T) {
 
 }
 
-func createInfo() SuiteInfoMap {
+func createInfo(N int) SuiteInfoMap {
 	info := make(SuiteInfoMap)
-	info[edwards.NewAES128SHA256Ed25519(true).String()] = &SuiteInfo{
-		Positions: []int{12 + 0 * KEYLEN, 12 + 1 * KEYLEN, 12 + 3 * KEYLEN, 12 + 4 * KEYLEN},
-		KeyLen:    KEYLEN,}
-	//info[ed25519.NewAES128SHA256Ed25519(true).String()] = &SuiteInfo{
-	//	Positions: []int{0, 40, 160},
-	//	KeyLen:    KEYLEN,}
+	positions := make([][]int, N+1)
+	suffixes := []string{"", "a", "b", "c", "d", "e", "f", "g", "h", "i"}
+	for k := 0; k < N; k++ {
+		limit := int(math.Ceil(math.Log2(float64(N)))) + 1
+		positions[k] = make([]int, limit)
+		floor := NONCE_LEN
+		for i:=0; i<limit; i++ {
+			positions[k][i] = floor + k % int(math.Pow(2, float64(i))) * KEYLEN
+			floor += int(math.Pow(2, float64(i))) * KEYLEN
+		}
+		//log.Println(positions[k])
+	}
+	for i := 0; i < N; i++ {
+		info[edwards.NewAES128SHA256Ed25519(true).String()+suffixes[i]] = &SuiteInfo{
+			Positions: positions[i], KeyLen: KEYLEN,}
+	}
+
 	return info
 }
 
-func createDecoders(n int) []Decoder {
+func createDecoders(n int, si SuiteInfoMap) []Decoder {
+	type suite struct {
+		Name string
+		Value abstract.Suite
+	}
 	decs := make([]Decoder, 0)
-	//suites := []abstract.Suite{edwards.NewAES128SHA256Ed25519(true), ed25519.NewAES128SHA256Ed25519(true)}
-	suites := []abstract.Suite{edwards.NewAES128SHA256Ed25519(true)}
-	for _, suite := range suites {
-		for i := 0; i < n; i++ {
-			pair := config.NewKeyPair(suite)
-			decs = append(decs, Decoder{Suite: suite, PublicKey: pair.Public, PrivateKey: pair.Secret})
+	suites := make([]suite, 0)
+	for name := range si {
+		suites = append(suites, suite{name, edwards.NewAES128SHA256Ed25519(true)})
+	}
+	//suites := []abstract.Suite{edwards.NewAES128SHA256Ed25519(true)}
+	for i := 0; i < n; i++ {
+		for _, suite := range suites {
+			pair := config.NewKeyPair(suite.Value)
+			decs = append(decs, Decoder{SuiteName: suite.Name, Suite: suite.Value, PublicKey: pair.Public, PrivateKey: pair.Secret})
 		}
 	}
 	return decs

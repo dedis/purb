@@ -14,6 +14,8 @@ import (
 	"github.com/nikirill/purbs/padding"
 	"strconv"
 	"sort"
+	"fmt"
+	"syscall"
 )
 
 // Cornerstone - 40 bytes
@@ -56,6 +58,8 @@ const (
 	AES
 )
 
+var EXPRM = false
+
 // Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
 var PLACEMENT_ATTEMPTS = 3
 
@@ -75,7 +79,6 @@ func MakePurb(data []byte, decoders []Decoder, infoMap SuiteInfoMap, keywrap int
 		return nil, err
 	}
 	purb.Write(infoMap, keywrap, stream)
-
 	return purb.buf, nil
 }
 
@@ -87,11 +90,18 @@ func (p *Purb) ConstructHeader(decoders []Decoder, infoMap SuiteInfoMap, keywrap
 	case AEAD:
 		h.EntryLen = SYMKEYLEN + OFFSET_POINTER_LEN + MAC_LEN
 	}
+	m := NewMonitor()
 	if err := h.genCornerstones(decoders, infoMap, stream); err != nil {
 		panic(err)
 	}
+	if EXPRM {
+		fmt.Printf("%f ", m.RecordAndReset())
+	}
 	if err := h.computeSharedSecrets(); err != nil {
 		panic(err)
+	}
+	if EXPRM {
+		fmt.Printf("%f ", m.Record())
 	}
 	h.Layout.Reset()
 	orderedSuites, err := h.locateCornerstones(infoMap, stream)
@@ -109,25 +119,26 @@ func (p *Purb) ConstructHeader(decoders []Decoder, infoMap SuiteInfoMap, keywrap
 func (h *Header) genCornerstones(decoders []Decoder, infoMap SuiteInfoMap, stream cipher.Stream) error {
 	for _, dec := range decoders {
 		// Add recipients to the header
-		if len(h.SuitesToEntries[dec.Suite.String()]) == 0 {
+		if len(h.SuitesToEntries[dec.SuiteName]) == 0 {
 			entries := make([]*Entry, 1)
 			entries[0] = NewEntry(dec)
-			h.SuitesToEntries[dec.Suite.String()] = entries
+			h.SuitesToEntries[dec.SuiteName] = entries
 		} else {
-			h.SuitesToEntries[dec.Suite.String()] = append(h.SuitesToEntries[dec.Suite.String()], NewEntry(dec))
+			h.SuitesToEntries[dec.SuiteName] = append(h.SuitesToEntries[dec.SuiteName], NewEntry(dec))
 		}
 
 		var pair *config.KeyPair
 		var encode []byte
-		if h.SuitesToCornerstone[dec.Suite.String()] == nil {
+		if h.SuitesToCornerstone[dec.SuiteName] == nil {
 			for {
 				// Generate a fresh key pair of a private key (scalar) and a public key (point)
 				pair = config.NewKeyPair(dec.Suite)
+				// Elligator encode the public key to a random-looking bit string
 				encode = pair.Public.(abstract.Hiding).HideEncode(stream)
 				if pair.Secret != nil && pair.Public != nil {
 					if encode != nil {
 						//log.Printf("Generated public key: %x", encode)
-						if len(encode) != infoMap[dec.Suite.String()].KeyLen {
+						if len(encode) != infoMap[dec.SuiteName].KeyLen {
 							log.Fatal("Length of elligator Encoded key is not what we expect. It's ", len(encode))
 						}
 						break
@@ -136,8 +147,8 @@ func (h *Header) genCornerstones(decoders []Decoder, infoMap SuiteInfoMap, strea
 					return errors.New("generated private or public keys were nil")
 				}
 			}
-			h.SuitesToCornerstone[dec.Suite.String()] = &Cornerstone{
-				SuiteName: dec.Suite.String(),
+			h.SuitesToCornerstone[dec.SuiteName] = &Cornerstone{
+				SuiteName: dec.SuiteName,
 				Priv:      pair.Secret,
 				Pub:       pair.Public,
 				Encoded:   encode,
@@ -158,9 +169,9 @@ func (h *Header) computeSharedSecrets() error {
 			if ok {
 				sharedKey := e.Recipient.Suite.Point().Mul(e.Recipient.PublicKey, skey.Priv) // Compute shared DH key
 				if sharedKey != nil {
-					//sharedBytes, _ := sharedKey.MarshalBinary()
-					//h.SuitesToEntries[suite][i].SharedSecret = KDF(sharedBytes) // Derive a key using KDF
-					h.SuitesToEntries[suite][i].SharedSecret, _ = sharedKey.MarshalBinary()
+					sharedBytes, _ := sharedKey.MarshalBinary()
+					h.SuitesToEntries[suite][i].SharedSecret = KDF(sharedBytes) // Derive a key using KDF
+					//h.SuitesToEntries[suite][i].SharedSecret, _ = sharedKey.MarshalBinary()
 					//fmt.Printf("Shared secret: %x and length is %d\n", h.SuitesToEntries[suite][i].SharedSecret,
 					//	len(h.SuitesToEntries[suite][i].SharedSecret))
 				} else {
@@ -194,9 +205,16 @@ func (h *Header) locateCornerstones(infoMap SuiteInfoMap, stream cipher.Stream) 
 	for _, stone := range h.SuitesToCornerstone {
 		stones = append(stones, stone)
 	}
-	// Sort the cornerstones such as the ones with the longest key length are placed first
+	// Sort the cornerstones such as the ones with the longest key length are placed first.
+	// If the lengths are equal, then the sort is lexicographic
 	sort.Slice(stones, func(i, j int) bool {
-		return len(stones[i].Encoded) > len(stones[j].Encoded)
+		if len(stones[i].Encoded) > len(stones[j].Encoded) {
+			return true
+		}
+		if len(stones[i].Encoded) == len(stones[j].Encoded) {
+			return stones[i].SuiteName < stones[j].SuiteName
+		}
+		return false
 	})
 	orderedSuites := make([]string, 0)
 	for _, stone := range stones { // for each cornerstone
@@ -207,24 +225,24 @@ func (h *Header) locateCornerstones(infoMap SuiteInfoMap, stream cipher.Stream) 
 		}
 		// Reserve all our possible positions in exclude layout,
 		// picking the first non-conflicting position as our primary.
-		npos := len(info.Positions)
-		for j := npos - 1; j >= 0; j-- {
+		primary := len(info.Positions)
+		for j := primary - 1; j >= 0; j-- {
 			low := info.Positions[j]
 			high := low + info.KeyLen
-			//log.Printf("reserving [%d-%d] for suite %s\n", low, high, stone.SuiteName)
-			if exclude.Reserve(low, high, false, stone.SuiteName) && j == npos-1 {
-				npos = j // no conflict, shift down
+			if exclude.Reserve(low, high, false, stone.SuiteName) && j == primary-1 {
+				//log.Printf("Reserving [%d-%d] for suite %s\n", low, high, stone.SuiteName)
+				primary = j // no conflict, shift down
 			}
 		}
-		if npos == len(info.Positions) {
+		if primary == len(info.Positions) {
 			return nil, errors.New("no viable position for suite " + stone.SuiteName)
 		}
-		h.SuitesToCornerstone[stone.SuiteName].Offset = info.Positions[npos]
+		h.SuitesToCornerstone[stone.SuiteName].Offset = info.Positions[primary]
 
 		// Permanently reserve the primary point position in h.Layout
-		low, high := info.region(npos)
+		low, high := info.region(primary)
 		if high > h.Length {
-			h.Length = high // +1 because bytes are counted from 0
+			h.Length = high
 		}
 		//log.Printf("reserving [%d-%d] for suite %s\n", low, high, stone.SuiteName)
 		if !h.Layout.Reserve(low, high, true, stone.SuiteName) {
@@ -255,7 +273,7 @@ func (h *Header) locateEntries(infoMap SuiteInfoMap, sOrder []string, simplified
 						if h.Layout.Reserve(start+tHash*h.EntryLen, start+(tHash+1)*h.EntryLen, true, "hash"+strconv.Itoa(tableSize)) {
 							h.SuitesToEntries[suite][i].Offset = start + tHash*h.EntryLen
 							located = true
-							//log.Printf("Placing entry at [%d-%d]", start+tHash*ENTRYLEN, start+(tHash+1)*ENTRYLEN)
+							//log.Printf("Placing entry at [%d-%d]", start+tHash*h.EntryLen, start+(tHash+1)*h.EntryLen)
 							break
 						}
 					}
@@ -316,9 +334,9 @@ func (p *Purb) Write(infoMap SuiteInfoMap, keywrap int, stream cipher.Stream) {
 	//	dummy = append(dummy, 0xFF)
 	//}
 	// copy cornerstones
-	for _, corner := range p.Header.SuitesToCornerstone {
-		msgbuf := p.growBuf(corner.Offset, corner.Offset+len(corner.Encoded))
-		copy(msgbuf, corner.Encoded)
+	for _, stone := range p.Header.SuitesToCornerstone {
+		msgbuf := p.growBuf(stone.Offset, stone.Offset+len(stone.Encoded))
+		copy(msgbuf, stone.Encoded)
 		//copy(msgbuf, dummy)
 	}
 
@@ -346,22 +364,31 @@ func (p *Purb) Write(infoMap SuiteInfoMap, keywrap int, stream cipher.Stream) {
 	//log.Printf("Buffer with header: %x", p.buf)
 	// Fill all unused parts of the header with random bits.
 	msglen := len(p.buf)
+	//msglen := p.Header.Length
 	p.Header.Layout.scanFree(func(lo, hi int) {
 		msgbuf := p.growBuf(lo, hi)
 		stream.XORKeyStream(msgbuf, msgbuf)
 	}, msglen)
 	//log.Printf("Final length of header: %d", len(p.buf))
-	//log.Printf("Buffer with header: %x", p.buf)
+	//log.Printf("Random with header: %x", p.buf)
 
 	// copy message into buffer
 	p.buf = append(p.buf, p.Payload...)
 	//log.Printf("Buffer with payload: %x", p.buf)
 
 	// XOR each cornerstone with the data in its non-primary positions and save as the cornerstone value
-	for _, corner := range p.Header.SuitesToCornerstone {
-		keylen := len(corner.Encoded)
+	stones := make([]*Cornerstone, 0)
+	for _, stone := range p.Header.SuitesToCornerstone {
+		stones = append(stones, stone)
+	}
+	sort.Slice(stones, func (i, j int) bool {
+		return stones[i].Offset < stones[j].Offset
+	})
+	for _, stone := range stones {
+		//log.Println("Write for: ", stone.SuiteName)
+		keylen := len(stone.Encoded)
 		corbuf := make([]byte, keylen)
-		for _, offset := range infoMap[corner.SuiteName].Positions {
+		for _, offset := range infoMap[stone.SuiteName].Positions {
 			stop := offset + keylen
 			// check that we have data at non-primary positions to xor
 			if stop > len(p.buf) {
@@ -377,7 +404,7 @@ func (p *Purb) Write(infoMap SuiteInfoMap, keywrap int, stream cipher.Stream) {
 			}
 		}
 		// copy the result of XOR to the primary position
-		copy(p.buf[corner.Offset:corner.Offset+keylen], corbuf)
+		copy(p.buf[stone.Offset:stone.Offset+keylen], corbuf)
 	}
 	//log.Printf("Buffer with xored: %x", p.buf)
 }
@@ -455,9 +482,46 @@ func NewPurb(key []byte, nonce []byte) (*Purb, error) {
 }
 
 func KDF(password []byte) []byte {
-	return pbkdf2.Key(password, nil, 16, SYMKEYLEN, sha256.New)
+	return pbkdf2.Key(password, nil, 16, KEYLEN, sha256.New)
 }
 
-//func (e *Entry) String() string {
-//	return fmt.Sprintf("(%s)%p", e.Recipient.Suite, e)
-//}
+// Helpers for measurement of CPU cost of operations
+type Monitor struct {
+	CPUtime float64
+}
+
+func NewMonitor() *Monitor {
+	var m Monitor
+	m.CPUtime = getCPUTime()
+	return &m
+}
+
+func (m *Monitor) Reset() {
+	m.CPUtime = getCPUTime()
+}
+
+func (m *Monitor) Record() float64 {
+	return getCPUTime() - m.CPUtime
+}
+
+func (m *Monitor) RecordAndReset() float64 {
+	old := m.CPUtime
+	m.CPUtime = getCPUTime()
+	return m.CPUtime - old
+}
+
+// Returns the sum of the system and the user CPU time used by the current process so far.
+func getCPUTime() float64 {
+	rusage := &syscall.Rusage{}
+	if err := syscall.Getrusage(syscall.RUSAGE_SELF, rusage); err != nil {
+		log.Fatalln("Couldn't get rusage time:", err)
+		return -1
+	}
+	s, u := rusage.Stime, rusage.Utime // system and user time
+	return iiToF(int64(s.Sec), int64(s.Usec)) + iiToF(int64(u.Sec), int64(u.Usec))
+}
+
+// Converts to milliseconds
+func iiToF(sec int64, usec int64) float64 {
+	return float64(sec)*1000.0 + float64(usec)/1000.0
+}

@@ -12,8 +12,8 @@ import (
 )
 
 func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap SuiteInfoMap) (bool, []byte, error) {
-	suite := dec.Suite
-	info := infoMap[suite.String()]
+	suiteName := dec.SuiteName
+	info := infoMap[suiteName]
 	if info == nil {
 		return false, nil, errors.New("no positions info for this suite")
 	}
@@ -40,11 +40,16 @@ func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap Sui
 			cornerstone[j] ^= temp[j]
 		}
 	}
+	//log.Printf("Found the key %x", cornerstone)
 
 	//Now that we have the key for our suite calculate the shared key
-	pub := suite.Point()
+	pub := dec.Suite.Point()
 	pub.(abstract.Hiding).HideDecode(cornerstone)
-	sharedSecret, err := suite.Point().Mul(pub, dec.PrivateKey).MarshalBinary()
+	//m := NewMonitor()
+	//sharedSecret, err := dec.Suite.Point().Mul(pub, dec.PrivateKey).MarshalBinary()
+	sharedBytes, err := dec.Suite.Point().Mul(pub, dec.PrivateKey).MarshalBinary()
+	sharedSecret := KDF(sharedBytes)
+	//fmt.Println("Multiplication ", m.CPUtime)
 	if err != nil {
 		return false, nil, err
 	}
@@ -62,9 +67,12 @@ func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap Sui
 		for start+(tHash+1)*ENTRYLEN < len(blob) {
 			for j := 0; j < PLACEMENT_ATTEMPTS; j++ {
 				tHash = (absPos + j) % tableSize
+				if start+(tHash+1)*ENTRYLEN > len(blob) {
+					break
+				}
 				switch keywrap {
 				case STREAM:
-					sec := suite.Cipher(sharedSecret)
+					sec := dec.Suite.Cipher(sharedSecret)
 					decrypted := make([]byte, ENTRYLEN)
 					sec.XORKeyStream(decrypted, blob[start+tHash*ENTRYLEN:start+(tHash+1)*ENTRYLEN])
 					found, message = verifyDecryption(decrypted, blob)
@@ -83,7 +91,7 @@ func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap Sui
 		for start+ENTRYLEN < len(blob) {
 			switch keywrap {
 			case STREAM:
-				sec := suite.Cipher(sharedSecret)
+				sec := dec.Suite.Cipher(sharedSecret)
 				decrypted := make([]byte, ENTRYLEN)
 				sec.XORKeyStream(decrypted, blob[start:start+ENTRYLEN])
 				found, message = verifyDecryption(decrypted, blob)
@@ -103,12 +111,10 @@ func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap Sui
 func verifyDecryption(decrypted []byte, blob []byte) (bool, []byte) {
 	var result bool
 	msgStart := int(binary.BigEndian.Uint32(decrypted[SYMKEYLEN:SYMKEYLEN+OFFSET_POINTER_LEN]))
-	//log.Println("Start of the message ", msgStart)
 	if msgStart > len(blob) {
 		return false, nil
 	}
-	log.Println("Start of the message ", msgStart)
-	//log.Println("Key ", decrypted[:SYMKEYLEN])
+	//log.Println("Start of the message ", msgStart)
 	key := decrypted[:SYMKEYLEN]
 	block, err := aes.NewCipher(key)
 	if err != nil {

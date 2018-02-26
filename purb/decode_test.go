@@ -9,8 +9,8 @@ import (
 
 func TestDecode(t *testing.T) {
 	fmt.Println("=================TEST PURB Decode=================")
-	si := createInfo()
-	decs := createDecoders(10)
+	si := createInfo(3)
+	decs := createDecoders(10, si)
 	data := []byte("gorilla here, gorilla there, I am not going anywhere")
 	// Normal
 	blob, err := MakePurb(data, decs, si, STREAM, false, random.Stream)
