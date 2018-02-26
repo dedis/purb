@@ -58,7 +58,7 @@ const (
 	AES
 )
 
-var EXPRM = false
+var EXPRM = true
 
 // Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
 var PLACEMENT_ATTEMPTS = 3

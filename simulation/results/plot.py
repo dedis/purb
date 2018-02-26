@@ -1,11 +1,12 @@
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import numpy as np
 
 colorbar = ['#EBEBEB', '#FFE5CC', '#CCE5FF']
 # colorbar = ['#EBEBEB', "#c2c2ff", "#C5E1C5", "#fffaca", "#ffc2c2", "#9EFFE3"]
 colorlog = ['#E2DC27', '#071784', '#077C0F', '#BC220A']
-hatches = ['', '//', '\\']
+hatches = ['', '//', '.']
 
 
 def plot_num_recipients():
@@ -114,18 +115,26 @@ def plot_encryption():
             plt.bar(xloc, other, width, color=colorbar[0], hatch=hatches[ns],
                     edgecolor='black', label='Other')
             plt.bar(xloc, genCorner, width, color=colorbar[1], hatch=hatches[ns],
-                    bottom=other, edgecolor='black', label='Generate ephemeral keys')
+                    bottom=other, edgecolor='black', label='Gen\&encode public')
             plt.bar(xloc, comShar, width, color=colorbar[2], hatch=hatches[ns],
-                    bottom=genCorner, edgecolor='black', label='Compute shared secrets')
+                    bottom=genCorner, edgecolor='black', label='Compute shared')
 
     plt.xticks(ind, Xs)
     plt.ylabel('CPU time, ms')
     plt.xlabel('Number of Recipients')
     plt.yscale('log')
-    # plt.grid(True, which="major", axis='both')
-    # plt.legend()
-    plt.show()
-    # plt.savefig('/Users/knikitin/work/papers/research/purb/figures/enc_time.eps', format='eps', dpi=1000)
+    plt.grid(True, which="major", axis='y')
+    suite1_leg = mpatches.Patch(facecolor='white', edgecolor='black', hatch=hatches[0], label='1 suite')
+    suite3_leg = mpatches.Patch(facecolor='white', edgecolor='black', hatch=hatches[1], label='3 suites')
+    suite10_leg = mpatches.Patch(facecolor='white', edgecolor='black', hatch=hatches[2], label='10 suites')
+    gen_leg = mpatches.Patch(facecolor=colorbar[1], edgecolor='black', label='Gen\&encode public')
+    com_leg = mpatches.Patch(facecolor=colorbar[2], edgecolor='black', label='Compute shared')
+    oth_leg = mpatches.Patch(facecolor=colorbar[0], edgecolor='black', label='Other')
+
+    plt.legend(handles=[gen_leg, com_leg, oth_leg, suite1_leg, suite3_leg, suite10_leg], ncol=2, fontsize=13,
+               labelspacing=0.2, columnspacing=1)
+    # plt.show()
+    plt.savefig('/Users/knikitin/work/papers/research/purb/figures/enc_time.eps', format='eps', dpi=1000)
 
 
 def mean_and_deviation(elems):
@@ -157,9 +166,9 @@ def main():
     mpl.rcParams['text.usetex'] = True
     mpl.rcParams['font.sans-serif'] = 'Computer Modern Sans serif'
     mpl.rcParams.update({'font.size': 16})
-    # plot_num_recipients()
+    plot_num_recipients()
     # plot_header_size()
-    plot_encryption()
+    # plot_encryption()
 
 
 if __name__ == "__main__":
