@@ -11,7 +11,7 @@ hatches = ['', '//', '.']
 
 def plot_num_recipients():
     pgp, pgph, purbsi, purb = [], [], [], []
-    with open("num_recipients.txt") as f:
+    with open("num_recipients_ex.txt") as f:
         Xs = list(map(float, f.readline().split()))
         for x in Xs:
             f.readline()
@@ -37,7 +37,7 @@ def plot_num_recipients():
     # plt.legend(loc='lower right', shadow=True)
 
     plt.xlim(1, 10000)
-    plt.ylim(0.1, 1000)
+    plt.ylim(0.01, 1000)
     plt.tick_params(axis='x', labelsize=16)
     plt.tick_params(axis='y', labelsize=16)
     plt.legend()
@@ -46,8 +46,8 @@ def plot_num_recipients():
     plt.grid(True, which="major", axis='both')
     # plt.grid(True, which="minor", axis='y')
     plt.axis()
-    # plt.show()
-    plt.savefig('/Users/knikitin/work/papers/research/purb/figures/num_recipients.eps', format='eps', dpi=1000)
+    plt.show()
+    # plt.savefig('/Users/knikitin/work/papers/research/purb/figures/num_recipients.eps', format='eps', dpi=1000)
 
 
 def plot_header_size():
@@ -162,9 +162,9 @@ def mean(elems):
 
 def main():
     mpl.rcParams['text.latex.preamble'] = [r'\usepackage{sansmath}', r'\sansmath']
-    mpl.rcParams['font.family'] = 'sans-serif'  # ... for regular text
+    # mpl.rcParams['font.family'] = 'sans-serif'  # ... for regular text
     mpl.rcParams['text.usetex'] = True
-    mpl.rcParams['font.sans-serif'] = 'Computer Modern Sans serif'
+    # mpl.rcParams['font.sans-serif'] = 'Computer Modern Sans serif'
     mpl.rcParams.update({'font.size': 16})
     plot_num_recipients()
     # plot_header_size()

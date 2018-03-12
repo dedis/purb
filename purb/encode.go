@@ -58,7 +58,7 @@ const (
 	AES
 )
 
-var EXPRM = true
+var EXPRM = false
 
 // Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
 var PLACEMENT_ATTEMPTS = 3
@@ -482,7 +482,7 @@ func NewPurb(key []byte, nonce []byte) (*Purb, error) {
 }
 
 func KDF(password []byte) []byte {
-	return pbkdf2.Key(password, nil, 16, KEYLEN, sha256.New)
+	return pbkdf2.Key(password, nil, 1, KEYLEN, sha256.New)
 }
 
 // Helpers for measurement of CPU cost of operations

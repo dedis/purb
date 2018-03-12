@@ -19,11 +19,11 @@ func MeasureNumRecipients() {
 	msg := []byte("And presently I was driving through the drizzle of the dying day, " +
 		"with the windshield wipers in full action but unable to cope with my tears.")
 
-	//nums := []int{1, 3, 5, 10, 30, 70, 100, 1000, 3000, 10000}
+	nums := []int{1, 3, 5, 10, 30, 70, 100, 1000, 3000, 10000}
 	//nums := []int{1, 3, 5, 10, 30, 70, 100}
-	nums := []int{100}
+	//nums := []int{100}
 	// File to write results to
-	f, err := os.Create("simulation/results/num_recipients_ex2.txt")
+	f, err := os.Create("simulation/results/num_recipients_ex.txt")
 	if err != nil {
 		panic(err)
 	}
@@ -38,16 +38,17 @@ func MeasureNumRecipients() {
 		for k := 0; k < 21; k++ {
 			log.Println("Iteration ", k)
 			//------------------- PGP -------------------
-			sender := NewPGP()
+			//sender := NewPGP()
 			recipients := make([]*PGP, 0)
 			for i := 0; i < N; i++ {
 				recipients = append(recipients, NewPGP())
 			}
 			// PGP clear
-			enc, err := sender.Encrypt(msg, recipients, false)
+			enc, err := Encrypt(msg, recipients, false)
 			if err != nil {
 				log.Fatal(err)
 			}
+			//fmt.Println("Id created ", recipients[len(recipients)-1].Public.Fingerprint)
 			//fmt.Printf("Encryption:\n%s\n", sender.ArmorEncryption(enc))
 			m := purb.NewMonitor()
 			_, err = recipients[len(recipients)-1].Decrypt(enc)
@@ -57,7 +58,7 @@ func MeasureNumRecipients() {
 			}
 
 			//---------------- PGP hidden -------------------
-			enc, err = sender.Encrypt(msg, recipients, true)
+			enc, err = Encrypt(msg, recipients, true)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -202,10 +203,10 @@ func DecodeOne() {
 	fmt.Println("Total time ", time.Since(start))
 
 	//PGP
-	sender := NewPGP()
+	//sender := NewPGP()
 	recipients := make([]*PGP, 1)
 	recipients[0] = NewPGP()
-	enc, err := sender.Encrypt(msg, recipients, false)
+	enc, err := Encrypt(msg, recipients, false)
 	if err != nil {
 		log.Fatal(err)
 	}

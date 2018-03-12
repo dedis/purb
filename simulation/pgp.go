@@ -6,17 +6,17 @@ import (
 
 	"errors"
 
-	"crypto/elliptic"
 	"crypto/rand"
+	"crypto"
 
 	"gopkg.in/dedis/onet.v1/log"
-
-	"github.com/nikirill/openpgp/ecdh"
-	"github.com/nikirill/openpgp/packet"
-	"github.com/nikirill/openpgp"
-	"github.com/nikirill/openpgp/armor"
-	"github.com/nikirill/openpgp/algorithm"
-	"github.com/nikirill/openpgp/encoding"
+	"github.com/nikirill/go-crypto/openpgp/packet"
+	"github.com/nikirill/go-crypto/openpgp"
+	"github.com/nikirill/go-crypto/openpgp/armor"
+	"github.com/nikirill/go-crypto/openpgp/ecdh"
+	"github.com/nikirill/go-crypto/curve25519"
+	"math/big"
+	"crypto/elliptic"
 )
 
 /*
@@ -29,24 +29,64 @@ type PGP struct {
 }
 
 func NewPGP() *PGP {
-	key, err := ecdh.GenerateKey(elliptic.P256(), rand.Reader)
-	key.KDF = encoding.NewBitString([]byte{0x00, algorithm.SHA256.Id(), algorithm.AES256.Id()})
-	log.ErrFatal(err)
+	//suite := curve25519.NewBlakeSHA256Curve25519()
+	secret, _ := gen25519KeyPair()
+	priv := packet.NewECDHPrivateKey(time.Now(), secret)
+	public := packet.PublicKey(priv.PublicKey)
 	return &PGP{
-		Public:  packet.NewECDHPublicKey(time.Now(), &key.PublicKey),
-		Private: packet.NewECDHPrivateKey(time.Now(), key),
+		Private: priv,
+		Public: &public,
 	}
 }
 
-//func NewPGPPublic(public string) *PGP {
-//	return &PGP{Public: DecodePublic(public)}
-//}
+func gen25519KeyPair() (*ecdh.PrivateKey, *ecdh.PublicKey) {
+	// Generate private and public keys for curve255519
+	var priv []byte
+	var x, y *big.Int
+	var err error
+	priv, x, y, err = elliptic.GenerateKey(curve25519.Cv25519(), rand.Reader)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ecdhpriv := new(ecdh.PrivateKey)
+	ecdhpriv.X = new(big.Int).SetBytes(priv)
+
+	ecdhpub := new(ecdh.PublicKey)
+	ecdhpub.Curve = curve25519.Cv25519()
+	ecdhpub.X = x
+	ecdhpub.Y = y
+	ecdhpriv.PublicKey = *ecdhpub
+
+	return ecdhpriv, ecdhpub
+}
+
+//func gen25519KeyPair() (*ecdh.PrivateKey, *ecdh.PublicKey) {
+//	// Generate private key for curve255519
+//	var pub, priv [32]byte
+//	if _, err := rand.Read(priv[:]); err != nil {
+//		log.Fatal("Curve25519: could not create private key")
+//	}
+//	// See https://cr.yp.to/ecdh.html
+//	priv[0] &= 248
+//	priv[31] &= 127
+//	priv[31] |= 64
 //
-//func NewECDHPublic(public *packet.PublicKey) *PGP {
-//	return &PGP{Public: public}
+//	curve25519.ScalarBaseMult(&pub, &priv)
+//	ecdhpriv := new(ecdh.PrivateKey)
+//	ecdhpub := new(ecdh.PublicKey)
+//	ecdhpriv.X = new(big.Int).SetBytes(priv[:])
+//
+//	ecdhpub.Curve = curve25519.Cv25519()
+//	ecdhpub.X = new(big.Int).SetBytes(pub[:])
+//	ecdhpub.Y = new(big.Int)
+//	fmt.Println(ecdhpub)
+//	ecdhpriv.PublicKey = *ecdhpub
+//
+//	return ecdhpriv, ecdhpub
 //}
 
-func (p *PGP) Encrypt(plaintext []byte, recipients []*PGP, hidden bool) ([]byte, error) {
+func Encrypt(plaintext []byte, recipients []*PGP, hidden bool) ([]byte, error) {
 	if len(recipients) == 0 {
 		return nil, errors.New("no recipients given")
 	}
@@ -55,7 +95,7 @@ func (p *PGP) Encrypt(plaintext []byte, recipients []*PGP, hidden bool) ([]byte,
 	for _, r := range recipients {
 		entities = append(entities, r.Entity())
 	}
-	in, err := openpgp.Encrypt(out, entities, hidden, nil, nil, nil)
+	in, err := openpgp.Encrypt(out, entities, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -114,8 +154,7 @@ func (p *PGP) Verify(data []byte, sigStr string) error {
 	return p.Public.VerifySignature(hash, sig)
 }
 
-
-func (p *PGP) ArmorEncryption(enc []byte) string {
+func ArmorEncryption(enc []byte) string {
 	arm := &bytes.Buffer{}
 	wArm, err := armor.Encode(arm, "Message", make(map[string]string))
 	log.ErrFatal(err)
@@ -145,8 +184,8 @@ func (p *PGP) ArmorPublic() string {
 
 func (p *PGP) Entity() *openpgp.Entity {
 	config := packet.Config{
-		DefaultHash:   algorithm.SHA256,
-		DefaultCipher: algorithm.AES256,
+		DefaultHash:   crypto.SHA256,
+		DefaultCipher: packet.CipherAES128,
 	}
 	currentTime := config.Now()
 	uid := packet.NewUserId("", "", "")
@@ -158,21 +197,16 @@ func (p *PGP) Entity() *openpgp.Entity {
 	}
 	isPrimaryId := false
 
-	cslice := make(algorithm.CipherSlice, 1)
-	cslice[0] = algorithm.AES256
-	hslice := make(algorithm.HashSlice, 1)
-	hslice[0] = algorithm.SHA256
-
 	e.Identities[uid.Id] = &openpgp.Identity{
 		Name:   uid.Name,
 		UserId: uid,
 		SelfSignature: &packet.Signature{
 			CreationTime:       currentTime,
 			SigType:            packet.SigTypePositiveCert,
-			PubKeyAlgo:         algorithm.ECDH,
-			Hash:               algorithm.SHA256,
-			PreferredSymmetric: cslice,
-			PreferredHash:      hslice,
+			PubKeyAlgo:         packet.PubKeyAlgoECDH,
+			Hash:               crypto.SHA256,
+			PreferredHash:      []uint8{8},
+			PreferredSymmetric: []uint8{7},
 			IsPrimaryId:        &isPrimaryId,
 			FlagsValid:         true,
 			FlagSign:           true,
@@ -190,8 +224,8 @@ func (p *PGP) Entity() *openpgp.Entity {
 		Sig: &packet.Signature{
 			CreationTime:              currentTime,
 			SigType:                   packet.SigTypeSubkeyBinding,
-			PubKeyAlgo:                algorithm.ECDSA,
-			Hash:                      algorithm.SHA256,
+			PubKeyAlgo:                packet.PubKeyAlgoECDSA,
+			Hash:                      crypto.SHA256,
 			FlagsValid:                true,
 			FlagEncryptStorage:        true,
 			FlagEncryptCommunications: true,
