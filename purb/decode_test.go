@@ -3,8 +3,8 @@ package purb
 import (
 	"testing"
 	"fmt"
-	"gopkg.in/dedis/crypto.v0/random"
 	"github.com/stretchr/testify/require"
+	"github.com/dedis/kyber/util/random"
 )
 
 func TestDecode(t *testing.T) {
@@ -13,7 +13,7 @@ func TestDecode(t *testing.T) {
 	decs := createDecoders(10, si)
 	data := []byte("gorilla here, gorilla there, I am not going anywhere")
 	// Normal
-	blob, err := MakePurb(data, decs, si, STREAM, false, random.Stream)
+	blob, err := MakePurb(data, decs, si, STREAM, false, random.New())
 	if err != nil {
 		panic(err.Error())
 	}
@@ -25,7 +25,7 @@ func TestDecode(t *testing.T) {
 	require.Equal(t, data, message)
 
 	// Simplified
-	blob, err = MakePurb(data, decs, si, STREAM, true, random.Stream)
+	blob, err = MakePurb(data, decs, si, STREAM, true, random.New())
 	if err != nil {
 		panic(err.Error())
 	}

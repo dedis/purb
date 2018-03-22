@@ -2,13 +2,15 @@
 package purb
 
 import (
-	"fmt"
-	"gopkg.in/dedis/crypto.v0/random"
+	"encoding/binary"
+	"github.com/dedis/kyber/util/random"
 )
 
 // Pick a uint32 uniformly at random
 func randUint32() uint32 {
-	return random.Uint32(random.Stream)
+	b := make([]byte, 4)
+	random.Bytes(b, random.New())
+	return binary.LittleEndian.Uint32(b)
 }
 
 // Pick a random height for a new skip-list node from a suitable distribution.
@@ -192,8 +194,6 @@ func (sl *SkipLayout) dump() {
 		//fmt.Printf(" H%d: %p\n", i, *pos[i])
 	}
 	for n := *pos[0]; n != nil; n = *pos[0] {
-		fmt.Printf("%p [%d-%d] level %d: %s\n",
-			n, n.low, n.high, len(n.suc), n.name)
 		for j := range n.suc { // skip-list invariant check
 			//fmt.Printf(" S%d: %p\n", j, n.suc[j])
 			if *pos[j] != n {

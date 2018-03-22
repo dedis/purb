@@ -18,13 +18,12 @@ func TestNewPGP(t *testing.T) {
 
 func TestPGP_EncryptDecrypt(t *testing.T) {
 	msg := []byte("gorilla")
-	sender := NewPGP()
 	recipients := make([]*PGP, 0)
 	for i:=0; i<100; i++ {
 		recipients = append(recipients, NewPGP())
 	}
 	// Normal PGP
-	enc, err := sender.Encrypt(msg, recipients, false)
+	enc, err := Encrypt(msg, recipients, false)
 	if err != nil {
 		log.ErrFatal(err)
 	}
@@ -36,7 +35,7 @@ func TestPGP_EncryptDecrypt(t *testing.T) {
 	require.Equal(t, msg, dec)
 
 	// Hidden recipients
-	enc, err = sender.Encrypt(msg, recipients, true)
+	enc, err = Encrypt(msg, recipients, true)
 	if err != nil {
 		log.ErrFatal(err)
 	}

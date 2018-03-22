@@ -7,8 +7,10 @@ import (
 	"encoding/binary"
 	"crypto/aes"
 	"crypto/cipher"
-	"gopkg.in/dedis/crypto.v0/abstract"
+
 	"github.com/nikirill/purbs/padding"
+
+	"github.com/dedis/kyber"
 )
 
 func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap SuiteInfoMap) (bool, []byte, error) {
@@ -44,10 +46,10 @@ func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap Sui
 
 	//Now that we have the key for our suite calculate the shared key
 	pub := dec.Suite.Point()
-	pub.(abstract.Hiding).HideDecode(cornerstone)
+	pub.(kyber.Hiding).HideDecode(cornerstone)
 	//m := NewMonitor()
 	//sharedSecret, err := dec.Suite.Point().Mul(pub, dec.PrivateKey).MarshalBinary()
-	sharedBytes, err := dec.Suite.Point().Mul(pub, dec.PrivateKey).MarshalBinary()
+	sharedBytes, err := dec.Suite.Point().Mul(dec.PrivateKey, pub).MarshalBinary()
 	sharedSecret := KDF(sharedBytes)
 	//fmt.Println("Multiplication ", m.CPUtime)
 	if err != nil {
@@ -72,9 +74,9 @@ func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap Sui
 				}
 				switch keywrap {
 				case STREAM:
-					sec := dec.Suite.Cipher(sharedSecret)
+					xof := dec.Suite.XOF(sharedSecret)
 					decrypted := make([]byte, ENTRYLEN)
-					sec.XORKeyStream(decrypted, blob[start+tHash*ENTRYLEN:start+(tHash+1)*ENTRYLEN])
+					xof.XORKeyStream(decrypted, blob[start+tHash*ENTRYLEN:start+(tHash+1)*ENTRYLEN])
 					found, message = verifyDecryption(decrypted, blob)
 				case AEAD:
 				case AES:
@@ -91,9 +93,9 @@ func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap Sui
 		for start+ENTRYLEN < len(blob) {
 			switch keywrap {
 			case STREAM:
-				sec := dec.Suite.Cipher(sharedSecret)
+				xof := dec.Suite.XOF(sharedSecret)
 				decrypted := make([]byte, ENTRYLEN)
-				sec.XORKeyStream(decrypted, blob[start:start+ENTRYLEN])
+				xof.XORKeyStream(decrypted, blob[start:start+ENTRYLEN])
 				found, message = verifyDecryption(decrypted, blob)
 			case AEAD:
 			case AES:

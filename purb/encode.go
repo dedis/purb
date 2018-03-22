@@ -2,20 +2,21 @@ package purb
 
 import (
 	"errors"
-	"golang.org/x/crypto/pbkdf2"
 	"crypto/sha256"
 	"log"
-	"gopkg.in/dedis/crypto.v0/random"
-	"gopkg.in/dedis/crypto.v0/config"
-	"gopkg.in/dedis/crypto.v0/abstract"
 	"encoding/binary"
 	"crypto/aes"
 	"crypto/cipher"
-	"github.com/nikirill/purbs/padding"
 	"strconv"
 	"sort"
 	"fmt"
 	"syscall"
+	"golang.org/x/crypto/pbkdf2"
+
+	"github.com/nikirill/purbs/padding"
+
+	"github.com/dedis/kyber/util/random"
+	"github.com/dedis/kyber/util/key"
 )
 
 // Cornerstone - 40 bytes
@@ -65,8 +66,10 @@ var PLACEMENT_ATTEMPTS = 3
 
 func MakePurb(data []byte, decoders []Decoder, infoMap SuiteInfoMap, keywrap int, simplified bool, stream cipher.Stream) ([]byte, error) {
 	// Generate payload key and global nonce. It could be passed by an application above
-	key := random.Bytes(SYMKEYLEN, stream)
-	nonce := random.Bytes(NONCE_LEN, stream)
+	key := make([]byte, SYMKEYLEN)
+	nonce := make([]byte, NONCE_LEN)
+	random.Bytes(key, stream)
+	random.Bytes(nonce, stream)
 	//key := []byte("key16key16key16!")
 	//nonce := []byte("noncenonce12")
 
@@ -127,19 +130,16 @@ func (h *Header) genCornerstones(decoders []Decoder, infoMap SuiteInfoMap, strea
 			h.SuitesToEntries[dec.SuiteName] = append(h.SuitesToEntries[dec.SuiteName], NewEntry(dec))
 		}
 
-		var pair *config.KeyPair
-		var encode []byte
+		var pair *key.Pair
 		if h.SuitesToCornerstone[dec.SuiteName] == nil {
 			for {
-				// Generate a fresh key pair of a private key (scalar) and a public key (point)
-				pair = config.NewKeyPair(dec.Suite)
-				// Elligator encode the public key to a random-looking bit string
-				encode = pair.Public.(abstract.Hiding).HideEncode(stream)
-				if pair.Secret != nil && pair.Public != nil {
-					if encode != nil {
+				// Generate a fresh key pair of a private key (scalar), a public key (point), and hidden encoding of the public key
+				pair = key.NewHidingKeyPair(dec.Suite)
+				if pair.Private != nil && pair.Public != nil {
+					if pair.Hiding != nil {
 						//log.Printf("Generated public key: %x", encode)
-						if len(encode) != infoMap[dec.SuiteName].KeyLen {
-							log.Fatal("Length of elligator Encoded key is not what we expect. It's ", len(encode))
+						if pair.Hiding.HideLen() != infoMap[dec.SuiteName].KeyLen {
+							log.Fatal("Length of elligator Encoded key is not what we expect. It's ", pair.Hiding.HideLen())
 						}
 						break
 					}
@@ -149,9 +149,7 @@ func (h *Header) genCornerstones(decoders []Decoder, infoMap SuiteInfoMap, strea
 			}
 			h.SuitesToCornerstone[dec.SuiteName] = &Cornerstone{
 				SuiteName: dec.SuiteName,
-				Priv:      pair.Secret,
-				Pub:       pair.Public,
-				Encoded:   encode,
+				KeyPair:   pair,
 				Offset:    -1,
 			}
 		}
@@ -167,7 +165,7 @@ func (h *Header) computeSharedSecrets() error {
 		for i, e := range entries {
 			skey, ok := h.SuitesToCornerstone[suite]
 			if ok {
-				sharedKey := e.Recipient.Suite.Point().Mul(e.Recipient.PublicKey, skey.Priv) // Compute shared DH key
+				sharedKey := e.Recipient.Suite.Point().Mul(skey.KeyPair.Private, e.Recipient.PublicKey) // Compute shared DH key
 				if sharedKey != nil {
 					sharedBytes, _ := sharedKey.MarshalBinary()
 					h.SuitesToEntries[suite][i].SharedSecret = KDF(sharedBytes) // Derive a key using KDF
@@ -208,10 +206,10 @@ func (h *Header) locateCornerstones(infoMap SuiteInfoMap, stream cipher.Stream) 
 	// Sort the cornerstones such as the ones with the longest key length are placed first.
 	// If the lengths are equal, then the sort is lexicographic
 	sort.Slice(stones, func(i, j int) bool {
-		if len(stones[i].Encoded) > len(stones[j].Encoded) {
+		if stones[i].KeyPair.Hiding.HideLen() > stones[j].KeyPair.Hiding.HideLen() {
 			return true
 		}
-		if len(stones[i].Encoded) == len(stones[j].Encoded) {
+		if stones[i].KeyPair.Hiding.HideLen() == stones[j].KeyPair.Hiding.HideLen() {
 			return stones[i].SuiteName < stones[j].SuiteName
 		}
 		return false
@@ -252,8 +250,8 @@ func (h *Header) locateCornerstones(infoMap SuiteInfoMap, stream cipher.Stream) 
 	return orderedSuites, nil
 }
 
-//Function that will find, place and reserve part of the header for the data
-//All hash tables start after their cornerstone.
+// locatEntries will find, place and reserve part of the header for the data
+// All hash tables start after their cornerstone.
 func (h *Header) locateEntries(infoMap SuiteInfoMap, sOrder []string, simplified bool, stream cipher.Stream) {
 	for _, suite := range sOrder {
 		for i, entry := range h.SuitesToEntries[suite] {
@@ -311,6 +309,8 @@ func (h *Header) locateEntries(infoMap SuiteInfoMap, sOrder []string, simplified
 	}
 }
 
+// PadThenEncryptData takes plaintext data as a byte slice, pads it using PURBs padding scheme,
+// and then encrypts using AEAD encryption scheme
 func (p *Purb) PadThenEncryptData(data []byte, stream cipher.Stream) error {
 	var err error
 	paddedData := padding.Pad(data, p.Header.Length+MAC_LEN)
@@ -335,8 +335,8 @@ func (p *Purb) Write(infoMap SuiteInfoMap, keywrap int, stream cipher.Stream) {
 	//}
 	// copy cornerstones
 	for _, stone := range p.Header.SuitesToCornerstone {
-		msgbuf := p.growBuf(stone.Offset, stone.Offset+len(stone.Encoded))
-		copy(msgbuf, stone.Encoded)
+		msgbuf := p.growBuf(stone.Offset, stone.Offset+stone.KeyPair.Hiding.HideLen())
+		copy(msgbuf, stone.KeyPair.Hiding.HideEncode(stream))
 		//copy(msgbuf, dummy)
 	}
 
@@ -350,9 +350,10 @@ func (p *Purb) Write(infoMap SuiteInfoMap, keywrap int, stream cipher.Stream) {
 			switch keywrap {
 			case STREAM:
 				// we use shared secret as a seed to a stream cipher
-				sec := entry.Recipient.Suite.Cipher(entry.SharedSecret)
+				//sec := entry.Recipient.Suite.XOF(entry.SharedSecret)
+				xof := entry.Recipient.Suite.XOF(entry.SharedSecret)
 				msgbuf := p.growBuf(entry.Offset, entry.Offset+p.Header.EntryLen)
-				sec.XORKeyStream(msgbuf, entryData)
+				xof.XORKeyStream(msgbuf, entryData)
 			case AEAD:
 
 			}
@@ -381,12 +382,12 @@ func (p *Purb) Write(infoMap SuiteInfoMap, keywrap int, stream cipher.Stream) {
 	for _, stone := range p.Header.SuitesToCornerstone {
 		stones = append(stones, stone)
 	}
-	sort.Slice(stones, func (i, j int) bool {
+	sort.Slice(stones, func(i, j int) bool {
 		return stones[i].Offset < stones[j].Offset
 	})
 	for _, stone := range stones {
 		//log.Println("Write for: ", stone.SuiteName)
-		keylen := len(stone.Encoded)
+		keylen := stone.KeyPair.Hiding.HideLen()
 		corbuf := make([]byte, keylen)
 		for _, offset := range infoMap[stone.SuiteName].Positions {
 			stop := offset + keylen
@@ -414,7 +415,8 @@ func (p *Purb) Write(infoMap SuiteInfoMap, keywrap int, stream cipher.Stream) {
 func AEADEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]byte, error) {
 	// Generate a random 16-byte key and create a cipher from it
 	if key == nil {
-		key = random.Bytes(KEYLEN, stream)
+		key := make([]byte, SYMKEYLEN)
+		random.Bytes(key, stream)
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {

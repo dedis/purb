@@ -1,6 +1,18 @@
 package purb
 
-import "gopkg.in/dedis/crypto.v0/abstract"
+import (
+	"github.com/dedis/kyber"
+	"github.com/dedis/kyber/util/key"
+)
+
+// Suite defines the required functionalities for each suite from kyber
+type Suite interface {
+	kyber.Encoding
+	kyber.Group
+	kyber.HashFactory
+	kyber.XOFFactory
+	kyber.Random
+}
 
 type SuiteInfoMap map[string]*SuiteInfo // suite info indexed by suite names
 
@@ -34,10 +46,8 @@ type Header struct {
 // Should have a uniform representation, e.g., an Elligator point.
 type Cornerstone struct {
 	SuiteName string
-	Priv      abstract.Scalar
-	Pub       abstract.Point
-	Encoded   []byte // Elligator Encoded public key
-	Offset    int    // Starting byte position in the header
+	KeyPair   *key.Pair
+	Offset    int // Starting byte position in the header
 }
 
 //Entry holds the info required to create an entrypoint for each recipient.
@@ -51,7 +61,7 @@ type Entry struct {
 // PrivateKey is nil for encoder
 type Decoder struct {
 	SuiteName  string
-	Suite      abstract.Suite
-	PublicKey  abstract.Point
-	PrivateKey abstract.Scalar
+	Suite
+	PublicKey  kyber.Point
+	PrivateKey kyber.Scalar
 }
