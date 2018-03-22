@@ -61,31 +61,6 @@ func gen25519KeyPair() (*ecdh.PrivateKey, *ecdh.PublicKey) {
 	return ecdhpriv, ecdhpub
 }
 
-//func gen25519KeyPair() (*ecdh.PrivateKey, *ecdh.PublicKey) {
-//	// Generate private key for curve255519
-//	var pub, priv [32]byte
-//	if _, err := rand.Read(priv[:]); err != nil {
-//		log.Fatal("Curve25519: could not create private key")
-//	}
-//	// See https://cr.yp.to/ecdh.html
-//	priv[0] &= 248
-//	priv[31] &= 127
-//	priv[31] |= 64
-//
-//	curve25519.ScalarBaseMult(&pub, &priv)
-//	ecdhpriv := new(ecdh.PrivateKey)
-//	ecdhpub := new(ecdh.PublicKey)
-//	ecdhpriv.X = new(big.Int).SetBytes(priv[:])
-//
-//	ecdhpub.Curve = curve25519.Cv25519()
-//	ecdhpub.X = new(big.Int).SetBytes(pub[:])
-//	ecdhpub.Y = new(big.Int)
-//	fmt.Println(ecdhpub)
-//	ecdhpriv.PublicKey = *ecdhpub
-//
-//	return ecdhpriv, ecdhpub
-//}
-
 func Encrypt(plaintext []byte, recipients []*PGP, hidden bool) ([]byte, error) {
 	if len(recipients) == 0 {
 		return nil, errors.New("no recipients given")
@@ -95,7 +70,7 @@ func Encrypt(plaintext []byte, recipients []*PGP, hidden bool) ([]byte, error) {
 	for _, r := range recipients {
 		entities = append(entities, r.Entity())
 	}
-	in, err := openpgp.Encrypt(out, entities, nil, nil, nil)
+	in, err := openpgp.Encrypt(out, entities, nil, nil, &packet.Config{Hidden: hidden})
 	if err != nil {
 		return nil, err
 	}

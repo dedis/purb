@@ -11,17 +11,17 @@ import (
 
 	"github.com/nikirill/purbs/purb"
 
-	"gopkg.in/dedis/kyber.v2/util/random"
-	"gopkg.in/dedis/kyber.v2/util/key"
-	"gopkg.in/dedis/kyber.v2/group/curve25519"
+	"github.com/dedis/kyber/util/random"
+	"github.com/dedis/kyber/group/curve25519"
+	"github.com/dedis/kyber/util/key"
 )
 
 func MeasureNumRecipients() {
 	msg := []byte("And presently I was driving through the drizzle of the dying day, " +
 		"with the windshield wipers in full action but unable to cope with my tears.")
 
-	nums := []int{1, 3, 5, 10, 30, 70, 100, 1000, 3000, 10000}
-	//nums := []int{1, 3, 5, 10, 30, 70, 100}
+	//nums := []int{1, 3, 5, 10, 30, 70, 100, 1000, 3000, 10000}
+	nums := []int{1, 3, 5, 10, 30, 70, 100}
 	//nums := []int{100}
 	// File to write results to
 	f, err := os.Create("simulation/results/num_recipients_ex.txt")
