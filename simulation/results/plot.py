@@ -11,7 +11,7 @@ hatches = ['', '//', '.']
 
 def plot_num_recipients():
     pgp, pgph, purbsi, purb = [], [], [], []
-    with open("num_recipients_ex.txt") as f:
+    with open("num_recipients.txt") as f:
         Xs = list(map(float, f.readline().split()))
         for x in Xs:
             f.readline()
@@ -46,8 +46,8 @@ def plot_num_recipients():
     plt.grid(True, which="major", axis='both')
     # plt.grid(True, which="minor", axis='y')
     plt.axis()
-    plt.show()
-    # plt.savefig('/Users/knikitin/work/papers/research/purb/figures/num_recipients.eps', format='eps', dpi=1000)
+    # plt.show()
+    plt.savefig('/Users/knikitin/work/papers/research/purb/figures/num_recipients.eps', format='eps', dpi=1000)
 
 
 def plot_header_size():

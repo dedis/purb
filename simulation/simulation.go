@@ -21,8 +21,8 @@ func MeasureNumRecipients() {
 		"with the windshield wipers in full action but unable to cope with my tears.")
 
 	//nums := []int{1, 3, 5, 10, 30, 70, 100, 1000, 3000, 10000}
-	nums := []int{1, 3, 5, 10, 30, 70, 100}
-	//nums := []int{100}
+	//nums := []int{1, 3, 5, 10, 30, 70, 100}
+	nums := []int{1000, 3000, 10000}
 	// File to write results to
 	f, err := os.Create("simulation/results/num_recipients_ex.txt")
 	if err != nil {
