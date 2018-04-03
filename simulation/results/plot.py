@@ -83,15 +83,15 @@ def plot_header_size():
     plt.xlabel('Number of Recipients')
     plt.grid(True, which="major", axis='both')
     plt.axis()
-    # plt.show()
-    plt.savefig('/Users/knikitin/work/papers/research/purb/figures/header_size.eps', format='eps', dpi=1000)
+    plt.show()
+    # plt.savefig('/Users/knikitin/work/papers/research/purb/figures/header_size.eps', format='eps', dpi=1000)
 
 
-def plot_encryption():
+def plot_encoding():
     N = 21
     # nsuites = [1, 3, 10]
     width = 0.2
-    with open("encryption_time.txt") as f:
+    with open("encoding_time.txt") as f:
         # Xs = list(map(float, f.readline().split()))
         Xs = f.readline().split()
         ind = np.arange(1, len(Xs) + 1)
@@ -127,8 +127,8 @@ def plot_encryption():
     suite1_leg = mpatches.Patch(facecolor='white', edgecolor='black', hatch=hatches[0], label='1 suite')
     suite3_leg = mpatches.Patch(facecolor='white', edgecolor='black', hatch=hatches[1], label='3 suites')
     suite10_leg = mpatches.Patch(facecolor='white', edgecolor='black', hatch=hatches[2], label='10 suites')
-    gen_leg = mpatches.Patch(facecolor=colorbar[1], edgecolor='black', label='Gen\&encode public')
-    com_leg = mpatches.Patch(facecolor=colorbar[2], edgecolor='black', label='Compute shared')
+    gen_leg = mpatches.Patch(facecolor=colorbar[1], edgecolor='black', label='Gen+enc pubkey')
+    com_leg = mpatches.Patch(facecolor=colorbar[2], edgecolor='black', label='Comp sharedsec')
     oth_leg = mpatches.Patch(facecolor=colorbar[0], edgecolor='black', label='Other')
 
     plt.legend(handles=[gen_leg, com_leg, oth_leg, suite1_leg, suite3_leg, suite10_leg], ncol=2, fontsize=13,
@@ -166,9 +166,9 @@ def main():
     mpl.rcParams['text.usetex'] = True
     # mpl.rcParams['font.sans-serif'] = 'Computer Modern Sans serif'
     mpl.rcParams.update({'font.size': 16})
-    plot_num_recipients()
+    # plot_num_recipients()
     # plot_header_size()
-    # plot_encryption()
+    plot_encoding()
 
 
 if __name__ == "__main__":

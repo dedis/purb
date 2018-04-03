@@ -114,7 +114,7 @@ func MeasureNumRecipients() {
 
 func MeasureHeaderSize() {
 	// File to write results to
-	f, err := os.Create("simulation/results/header_size_ex.txt")
+	f, err := os.Create("simulation/results/header_size.txt")
 	if err != nil {
 		panic(err)
 	}
@@ -269,10 +269,14 @@ func createMultiDecoders(n int, si purb.SuiteInfoMap) []purb.Decoder {
 	for name := range si {
 		suites = append(suites, suite{name, curve25519.NewBlakeSHA256Curve25519(true)})
 	}
-	for i := 0; i < n; i++ {
+	for n > 0 {
 		for _, suite := range suites {
 			pair := key.NewHidingKeyPair(suite.Value)
 			decs = append(decs, purb.Decoder{SuiteName: suite.Name, Suite: suite.Value, PublicKey: pair.Public, PrivateKey: pair.Private})
+			n -= 1
+			if n == 0 {
+				break
+			}
 		}
 	}
 	return decs
