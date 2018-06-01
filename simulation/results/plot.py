@@ -22,16 +22,16 @@ def plot_num_recipients():
 
     print(pgp, pgph, purbsi, purb)
 
-    plt.loglog(Xs, [i[0] for i in pgp], color='#E2DC27', label='PGP', marker='.')
+    plt.loglog(Xs, [i[0] for i in pgp], color='#E2DC27', label='PGP standard', marker='.')
     plt.fill_between(Xs, [i[0] - i[1] for i in pgp], [i[0] + i[1] for i in pgp], facecolor='#FFFDCD')
 
     plt.loglog(Xs, [i[0] for i in pgph], color='#071784', label='PGP hidden', marker='d')
     plt.fill_between(Xs, [i[0] - i[1] for i in pgph], [i[0] + i[1] for i in pgph], facecolor='#CDE1FF')
 
-    plt.loglog(Xs, [i[0] for i in purbsi], color='#077C0F', label='PURBs simplified', marker='*')
+    plt.loglog(Xs, [i[0] for i in purbsi], color='#077C0F', label='PURBs flat', marker='*')
     plt.fill_between(Xs, [i[0] - i[1] for i in purbsi], [i[0] + i[1] for i in purbsi], facecolor='#D4FFE3')
 
-    plt.loglog(Xs, [i[0] for i in purb], color='#BC220A', label='PURBs', marker='s')
+    plt.loglog(Xs, [i[0] for i in purb], color='#BC220A', label='PURBs final', marker='s')
     plt.fill_between(Xs, [i[0] - i[1] for i in purb], [i[0] + i[1] for i in purb], facecolor='#FFDFD1')
 
     # plt.legend(loc='lower right', shadow=True)
@@ -44,6 +44,10 @@ def plot_num_recipients():
     plt.ylabel('CPU time, ms')
     plt.xlabel('Number of Recipients')
     plt.grid(True, which="major", axis='both')
+    # Gap explaining line
+    plt.annotate("", xy=(1.15, 0.12), xytext=(1.15, 2.5), arrowprops=dict(arrowstyle='<|-|>', linestyle='--', color='black'))
+    plt.text(1.25, 1, 'Assembly-', fontsize=10, rotation='vertical', color='black')
+    plt.text(1.48, 1.2, 'optimization', fontsize=10, rotation='vertical', color='black')
     # plt.grid(True, which="minor", axis='y')
     plt.axis()
     # plt.show()
@@ -63,16 +67,16 @@ def plot_header_size():
 
     print(flat, slack1, slack3, slack10)
 
-    plt.loglog(Xs, [i[0] for i in flat], color='#E2DC27', label='Simplified', marker='d')
+    plt.loglog(Xs, [i[0] for i in flat], color='#E2DC27', label='Flat', marker='d')
     plt.fill_between(Xs, [i[0] - i[1] for i in flat], [i[0] + i[1] for i in flat], facecolor='#FFFDCD')
 
-    plt.loglog(Xs, [i[0] for i in slack1], color='#071784', label='1 Attempt', marker='s')
+    plt.loglog(Xs, [i[0] for i in slack1], color='#071784', label='1 Trial', marker='s')
     plt.fill_between(Xs, [i[0] - i[1] for i in slack1], [i[0] + i[1] for i in slack1], facecolor='#CDE1FF')
 
-    plt.loglog(Xs, [i[0] for i in slack3], color='#BC220A', label='3 Attempts', marker='*')
+    plt.loglog(Xs, [i[0] for i in slack3], color='#BC220A', label='3 Trials', marker='*')
     plt.fill_between(Xs, [i[0] - i[1] for i in slack3], [i[0] + i[1] for i in slack3], facecolor='#FFDFD1')
 
-    plt.loglog(Xs, [i[0] for i in slack10], color='#077C0F', label='10 Attempts', marker='.')
+    plt.loglog(Xs, [i[0] for i in slack10], color='#077C0F', label='10 Trials', marker='.')
     plt.fill_between(Xs, [i[0] - i[1] for i in slack10], [i[0] + i[1] for i in slack10], facecolor='#D4FFE3')
 
     plt.tick_params(axis='x', labelsize=16)
@@ -112,6 +116,12 @@ def plot_encoding():
 
             # print(genCorner)
             xloc = [i + (ns - 1) * width for i in ind[ns:]]
+            # plt.bar(xloc, other, width, color=colorbar[0], hatch=hatches[ns],
+            #         bottom=genCorner, edgecolor='black', label='Other')
+            # plt.bar(xloc, genCorner, width, color=colorbar[1], hatch=hatches[ns],
+            #         bottom=comShar, edgecolor='black', label='Gen\&encode public')
+            # plt.bar(xloc, comShar, width, color=colorbar[2], hatch=hatches[ns],
+            #         edgecolor='black', label='Compute shared')
             plt.bar(xloc, other, width, color=colorbar[0], hatch=hatches[ns],
                     edgecolor='black', label='Other')
             plt.bar(xloc, genCorner, width, color=colorbar[1], hatch=hatches[ns],
@@ -133,8 +143,8 @@ def plot_encoding():
 
     plt.legend(handles=[gen_leg, com_leg, oth_leg, suite1_leg, suite3_leg, suite10_leg], ncol=2, fontsize=13,
                labelspacing=0.2, columnspacing=1)
-    # plt.show()
-    plt.savefig('/Users/knikitin/work/papers/research/purb/figures/enc_time.eps', format='eps', dpi=1000)
+    plt.show()
+    # plt.savefig('/Users/knikitin/work/papers/research/purb/figures/enc_time.eps', format='eps', dpi=1000)
 
 
 def mean_and_deviation(elems):
@@ -166,9 +176,9 @@ def main():
     mpl.rcParams['text.usetex'] = True
     # mpl.rcParams['font.sans-serif'] = 'Computer Modern Sans serif'
     mpl.rcParams.update({'font.size': 16})
-    # plot_num_recipients()
+    plot_num_recipients()
     # plot_header_size()
-    plot_encoding()
+    # plot_encoding()
 
 
 if __name__ == "__main__":

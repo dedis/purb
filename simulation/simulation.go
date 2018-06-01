@@ -2,7 +2,6 @@ package simul
 
 import (
 	"fmt"
-	"time"
 	"bytes"
 	"os"
 	"strings"
@@ -17,12 +16,26 @@ import (
 )
 
 func MeasureNumRecipients() {
-	msg := []byte("And presently I was driving through the drizzle of the dying day, " +
+	msg := []byte("“Are you quite, quite sure that—well," +
+		"not tomorrow, of course, and not after tomorrow, but—well—some day, any day," +
+		"you will not come to live with me? I will create a brand new God and thank him with piercing" +
+		"cries, if you give me that microscopic hope”" +
+		"“No,” she said smiling, “no.”" +
+		"“It would have made all the difference,” said Humbert Humbert." +
+		"Then I pulled out my automatic—I mean, this is the kind of fool thing " +
+		"a reader might suppose I did. It never even occurred to me to do it." +
+		"“Good by-aye!” she chanted, my American sweet immortal dead love; for she is dead" +
+		"and immortal if you are reading this. I mean, such is the formal agreement with the so-called authorities." +
+		"Then, as I drove away, I heard her shout in a vibrant voice to her Dick;" +
+		"and the dog started to lope alongside my car like a fat " +
+		"dolphin, but he was too heavy and old, and very soon gave up. " +
+		"And presently I was driving through the drizzle of the dying day, " +
 		"with the windshield wipers in full action but unable to cope with my tears.")
 
-	//nums := []int{1, 3, 5, 10, 30, 70, 100, 1000, 3000, 10000}
+	log.Printf("Length of the message is %d bytes\n", len(msg))
+	nums := []int{1, 3, 5, 10, 30, 70, 100, 1000, 3000, 10000}
 	//nums := []int{1, 3, 5, 10, 30, 70, 100}
-	nums := []int{1000, 3000, 10000}
+	//nums := []int{1000, 3000, 10000}
 	// File to write results to
 	f, err := os.Create("simulation/results/num_recipients_ex.txt")
 	if err != nil {
@@ -166,7 +179,20 @@ func MeasureHeaderSize() {
 }
 
 func MeasureEncryptionTime() {
-	msg := []byte("And presently I was driving through the drizzle of the dying day, " +
+	msg := []byte("“Are you quite, quite sure that—well," +
+		"not tomorrow, of course, and not after tomorrow, but—well—some day, any day," +
+		"you will not come to live with me? I will create a brand new God and thank him with piercing" +
+		"cries, if you give me that microscopic hope”" +
+		"“No,” she said smiling, “no.”" +
+		"“It would have made all the difference,” said Humbert Humbert." +
+		"Then I pulled out my automatic—I mean, this is the kind of fool thing " +
+		"a reader might suppose I did. It never even occurred to me to do it." +
+		"“Good by-aye!” she chanted, my American sweet immortal dead love; for she is dead" +
+		"and immortal if you are reading this. I mean, such is the formal agreement with the so-called authorities." +
+		"Then, as I drove away, I heard her shout in a vibrant voice to her Dick;" +
+		"and the dog started to lope alongside my car like a fat " +
+		"dolphin, but he was too heavy and old, and very soon gave up. " +
+		"And presently I was driving through the drizzle of the dying day, " +
 		"with the windshield wipers in full action but unable to cope with my tears.")
 	log.Printf("Length of the message is %d bytes\n", len(msg))
 	purb.EXPRM = true
@@ -202,15 +228,14 @@ func DecodeOne() {
 	if err != nil {
 		panic(err.Error())
 	}
-	start := time.Now()
 	purb.Decode(blob, &decs[0], purb.STREAM, false, si)
-	fmt.Println("Total time ", time.Since(start))
 
 	//PGP
 	//sender := NewPGP()
 	recipients := make([]*PGP, 1)
 	recipients[0] = NewPGP()
 	enc, err := Encrypt(msg, recipients, false)
+	log.Println(ArmorEncryption(enc))
 	if err != nil {
 		log.Fatal(err)
 	}

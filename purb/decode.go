@@ -51,7 +51,7 @@ func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap Sui
 	//sharedSecret, err := dec.Suite.Point().Mul(pub, dec.PrivateKey).MarshalBinary()
 	sharedBytes, err := dec.Suite.Point().Mul(dec.PrivateKey, pub).MarshalBinary()
 	sharedSecret := KDF(sharedBytes)
-	//fmt.Println("Multiplication ", m.CPUtime)
+	//log.Println("Multiplication PURBS: ", m.Record())
 	if err != nil {
 		return false, nil, err
 	}
@@ -72,6 +72,7 @@ func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap Sui
 				if start+(tHash+1)*ENTRYLEN > len(blob) {
 					break
 				}
+				m := NewMonitor()
 				switch keywrap {
 				case STREAM:
 					xof := dec.Suite.XOF(sharedSecret)
@@ -81,6 +82,7 @@ func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap Sui
 				case AEAD:
 				case AES:
 				}
+				log.Println("Entry point decryption: ", m.Record())
 
 				if found {
 					return found, message, nil
