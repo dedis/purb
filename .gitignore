@@ -16,3 +16,6 @@
 # Gogland projects files
 .idea/
 .DS_Store
+
+experiments-padding/__pycache__
+experiments-padding/*.eps

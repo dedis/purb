@@ -1,3 +1,7 @@
+.PHONY: example
+example:
+	go run -tags=vartime example.go
+
 .PHONY:test
 test:
 	cd purbs && go test -v -race -tags=vartime *
@@ -7,6 +11,6 @@ test:
 simul:
 	cd experiments-encoding && go run -tags=vartime simulation.go
 
-.PHONY: example
-example:
-	go run -tags=vartime example.go
+.PHONY: padme-figures
+padme-figures:
+	$(MAKE) -C experiments-padding all
