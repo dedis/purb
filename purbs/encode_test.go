@@ -5,7 +5,7 @@ import (
 	"github.com/dedis/kyber/group/curve25519"
 	"github.com/dedis/kyber/util/key"
 	"github.com/dedis/kyber/util/random"
-	"github.com/nikirill/crypto/purb"
+	//"github.com/nikirill/crypto/purb"
 	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
@@ -79,14 +79,14 @@ func createInfo(N int) SuiteInfoMap {
 		positions[k] = make([]int, limit)
 		floor := NONCE_LEN
 		for i := 0; i < limit; i++ {
-			positions[k][i] = floor + k%int(math.Pow(2, float64(i)))*purb.KEYLEN
-			floor += int(math.Pow(2, float64(i))) * purb.KEYLEN
+			positions[k][i] = floor + k%int(math.Pow(2, float64(i)))*KEYLEN
+			floor += int(math.Pow(2, float64(i))) * KEYLEN
 		}
 		//log.Println(positions[k])
 	}
 	for i := 0; i < N; i++ {
 		info[curve25519.NewBlakeSHA256Curve25519(true).String()+suffixes[i]] = &SuiteInfo{
-			Positions: positions[i], KeyLen: purb.KEYLEN}
+			Positions: positions[i], KeyLen: KEYLEN}
 	}
 
 	return info

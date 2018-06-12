@@ -131,7 +131,7 @@ func verifyDecryption(decrypted []byte, blob []byte) (bool, []byte) {
 		result = true
 	}
 	if len(msg) != 0 {
-		msg = padding.UnPad(msg)
+		msg = UnPad(msg)
 		return result, msg
 	} else {
 		return result, nil

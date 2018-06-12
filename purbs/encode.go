@@ -311,7 +311,7 @@ func (h *Header) locateEntries(infoMap SuiteInfoMap, sOrder []string, simplified
 // and then encrypts using AEAD encryption scheme
 func (p *Purb) PadThenEncryptData(data []byte, stream cipher.Stream) error {
 	var err error
-	paddedData := padding.Pad(data, p.Header.Length+MAC_LEN)
+	paddedData := Pad(data, p.Header.Length+MAC_LEN)
 	p.Payload, err = AEADEncrypt(paddedData, p.Nonce, p.key, nil, stream)
 	if err != nil {
 		log.Fatalln(err)
