@@ -2,7 +2,12 @@
 
 A library for a novel encoding approach preventing metadata leakage for encrypted communication and data at rest.
 
-To run simulation, choose an experiment in `measure.go` and run
 ```
-go run -tags=vartime measure.go
+make example
 ```
+(if this does not work, you can get the librairies by doing `make install`)
+
+The folder `experiments-encoding` contains simulation about PURBs encoding and decoding, and the duration of those operations.
+
+The folder `experiments-padding` contains an evaluation of Padmé, the padding algorithm for PURBs.
+
