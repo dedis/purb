@@ -5,6 +5,7 @@ A library for a novel encoding approach preventing metadata leakage for encrypte
 ```
 make example
 ```
+(if this does not work, you can get the librairies by doing `make install`)
 
 The folder `experiments-encoding` contains simulation about PURBs encoding and decoding, and the duration of those operations.
 

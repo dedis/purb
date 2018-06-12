@@ -1,3 +1,7 @@
+.PHONY: install
+install:
+	go get -u -v ./...
+
 .PHONY: example
 example:
 	go run -tags=vartime example.go
