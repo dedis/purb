@@ -1,12 +1,12 @@
-package simul
+package pgp
 
 import (
 	"testing"
 
-	"gopkg.in/dedis/onet.v1/log"
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"fmt"
+	"gopkg.in/dedis/onet.v1/log"
 )
 
 func TestNewPGP(t *testing.T) {
@@ -20,7 +20,7 @@ func TestNewPGP(t *testing.T) {
 func TestPGP_EncryptDecrypt(t *testing.T) {
 	msg := []byte("gorilla")
 	recipients := make([]*PGP, 0)
-	for i:=0; i<100; i++ {
+	for i := 0; i < 100; i++ {
 		recipients = append(recipients, NewPGP())
 	}
 	// Normal PGP

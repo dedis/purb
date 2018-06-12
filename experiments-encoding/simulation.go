@@ -1,19 +1,28 @@
-package simul
+package main
 
 import (
-	"fmt"
 	"bytes"
-	"os"
-	"strings"
+	"fmt"
 	"log"
 	"math"
+	"os"
+	"strings"
 
-	"github.com/nikirill/purbs/purb"
+	//"github.com/nikirill/purbs/purb"
 
-	"github.com/dedis/kyber/util/random"
 	"github.com/dedis/kyber/group/curve25519"
 	"github.com/dedis/kyber/util/key"
+	"github.com/dedis/kyber/util/random"
+	"github.com/dedis/paper_purbs/experiments-encoding/pgp"
+	"github.com/dedis/paper_purbs/purbs"
 )
+
+func main() {
+	//MeasureNumRecipients()
+	//MeasureHeaderSize()
+	//MeasureEncryptionTime()
+	DecodeOne()
+}
 
 func MeasureNumRecipients() {
 	msg := []byte("“Are you quite, quite sure that—well," +
@@ -53,18 +62,18 @@ func MeasureNumRecipients() {
 			log.Println("Iteration ", k)
 			//------------------- PGP -------------------
 			//sender := NewPGP()
-			recipients := make([]*PGP, 0)
+			recipients := make([]*pgp.PGP, 0)
 			for i := 0; i < N; i++ {
-				recipients = append(recipients, NewPGP())
+				recipients = append(recipients, pgp.NewPGP())
 			}
 			// PGP clear
-			enc, err := Encrypt(msg, recipients, false)
+			enc, err := pgp.Encrypt(msg, recipients, false)
 			if err != nil {
 				log.Fatal(err)
 			}
 			//fmt.Println("Id created ", recipients[len(recipients)-1].Public.Fingerprint)
 			//fmt.Printf("Encryption:\n%s\n", sender.ArmorEncryption(enc))
-			m := purb.NewMonitor()
+			m := purbs.NewMonitor()
 			_, err = recipients[len(recipients)-1].Decrypt(enc)
 			tPGPclear = append(tPGPclear, m.Record())
 			if err != nil {
@@ -72,7 +81,7 @@ func MeasureNumRecipients() {
 			}
 
 			//---------------- PGP hidden -------------------
-			enc, err = Encrypt(msg, recipients, true)
+			enc, err = pgp.Encrypt(msg, recipients, true)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -85,12 +94,12 @@ func MeasureNumRecipients() {
 			}
 
 			// ----------- PURBs simplified ---------------
-			blob, err := purb.MakePurb(msg, decs, si, purb.STREAM, true, random.New())
+			blob, err := purbs.MakePurb(msg, decs, si, purbs.STREAM, true, random.New())
 			if err != nil {
 				panic(err.Error())
 			}
 			m.Reset()
-			success, out, err := purb.Decode(blob, &decs[len(decs)-1], purb.STREAM, true, si)
+			success, out, err := purbs.Decode(blob, &decs[len(decs)-1], purbs.STREAM, true, si)
 			tPURBs = append(tPURBs, m.Record())
 
 			if !success || !bytes.Equal(out, msg) {
@@ -101,12 +110,12 @@ func MeasureNumRecipients() {
 			}
 
 			// ----------------- PURBs --------------------
-			blob, err = purb.MakePurb(msg, decs, si, purb.STREAM, false, random.New())
+			blob, err = purbs.MakePurb(msg, decs, si, purbs.STREAM, false, random.New())
 			if err != nil {
 				panic(err.Error())
 			}
 			m.Reset()
-			success, out, err = purb.Decode(blob, &decs[len(decs)-1], purb.STREAM, false, si)
+			success, out, err = purbs.Decode(blob, &decs[len(decs)-1], purbs.STREAM, false, si)
 			tPURBhash = append(tPURBhash, m.Record())
 
 			if !success || !bytes.Equal(out, msg) {
@@ -133,8 +142,8 @@ func MeasureHeaderSize() {
 	}
 	defer f.Close()
 	si := createInfo()
-	key := make([]byte, purb.SYMKEYLEN)
-	nonce := make([]byte, purb.NONCE_LEN)
+	key := make([]byte, purbs.SYMKEYLEN)
+	nonce := make([]byte, purbs.NONCE_LEN)
 	random.Bytes(key, random.New())
 	random.Bytes(nonce, random.New())
 	nums := []int{1, 3, 10, 30, 100, 300, 1000, 3000}
@@ -148,27 +157,27 @@ func MeasureHeaderSize() {
 		for k := 0; k < 21; k++ {
 			log.Println("Iteration ", k)
 			// Baseline
-			p, err := purb.NewPurb(key, nonce)
+			p, err := purbs.NewPurb(key, nonce)
 			if err != nil {
 				log.Fatalln(err)
 			}
-			p.ConstructHeader(decs, si, purb.STREAM, true, random.New())
+			p.ConstructHeader(decs, si, purbs.STREAM, true, random.New())
 			flat = append(flat, p.Header.Length)
 
 			// 1 attempt
-			purb.PLACEMENT_ATTEMPTS = 1
+			purbs.PLACEMENT_ATTEMPTS = 1
 			p.Header = nil
-			p.ConstructHeader(decs, si, purb.STREAM, false, random.New())
+			p.ConstructHeader(decs, si, purbs.STREAM, false, random.New())
 			slack1 = append(slack1, p.Header.Length)
 			// 3 attempts
-			purb.PLACEMENT_ATTEMPTS = 3
+			purbs.PLACEMENT_ATTEMPTS = 3
 			p.Header = nil
-			p.ConstructHeader(decs, si, purb.STREAM, false, random.New())
+			p.ConstructHeader(decs, si, purbs.STREAM, false, random.New())
 			slack3 = append(slack3, p.Header.Length)
 			// 10 attempts
-			purb.PLACEMENT_ATTEMPTS = 10
+			purbs.PLACEMENT_ATTEMPTS = 10
 			p.Header = nil
-			p.ConstructHeader(decs, si, purb.STREAM, false, random.New())
+			p.ConstructHeader(decs, si, purbs.STREAM, false, random.New())
 			slack10 = append(slack10, p.Header.Length)
 		}
 		f.WriteString(strings.Trim(fmt.Sprint(flat), "[]") + "\n")
@@ -195,7 +204,7 @@ func MeasureEncryptionTime() {
 		"And presently I was driving through the drizzle of the dying day, " +
 		"with the windshield wipers in full action but unable to cope with my tears.")
 	log.Printf("Length of the message is %d bytes\n", len(msg))
-	purb.EXPRM = true
+	purbs.EXPRM = true
 	nsuites := []int{1, 3, 10}
 	recs := []int{1, 3, 10, 100}
 	fmt.Println(strings.Trim(fmt.Sprint(recs), "[]"))
@@ -207,9 +216,9 @@ func MeasureEncryptionTime() {
 				continue
 			}
 			decs := createMultiDecoders(N, si)
-			m := purb.NewMonitor()
+			m := purbs.NewMonitor()
 			for i := 0; i < 21; i++ {
-				_, err := purb.MakePurb(msg, decs, si, purb.STREAM, false, random.New())
+				_, err := purbs.MakePurb(msg, decs, si, purbs.STREAM, false, random.New())
 				fmt.Printf("%f\n", m.RecordAndReset())
 				if err != nil {
 					panic(err.Error())
@@ -224,72 +233,72 @@ func DecodeOne() {
 		"with the windshield wipers in full action but unable to cope with my tears.")
 	si := createInfo()
 	decs := createDecoders(1)
-	blob, err := purb.MakePurb(msg, decs, si, purb.STREAM, false, random.New())
+	blob, err := purbs.MakePurb(msg, decs, si, purbs.STREAM, false, random.New())
 	if err != nil {
 		panic(err.Error())
 	}
-	purb.Decode(blob, &decs[0], purb.STREAM, false, si)
+	purbs.Decode(blob, &decs[0], purbs.STREAM, false, si)
 
 	//PGP
 	//sender := NewPGP()
-	recipients := make([]*PGP, 1)
-	recipients[0] = NewPGP()
-	enc, err := Encrypt(msg, recipients, false)
-	log.Println(ArmorEncryption(enc))
+	recipients := make([]*pgp.PGP, 1)
+	recipients[0] = pgp.NewPGP()
+	enc, err := pgp.Encrypt(msg, recipients, false)
+	log.Println(pgp.ArmorEncryption(enc))
 	if err != nil {
 		log.Fatal(err)
 	}
 	_, err = recipients[len(recipients)-1].Decrypt(enc)
 }
 
-func createInfo() purb.SuiteInfoMap {
-	info := make(purb.SuiteInfoMap)
-	info[curve25519.NewBlakeSHA256Curve25519(true).String()] = &purb.SuiteInfo{
-		Positions: []int{12 + 0*purb.KEYLEN, 12 + 1*purb.KEYLEN, 12 + 3*purb.KEYLEN, 12 + 4*purb.KEYLEN},
-		KeyLen:    purb.KEYLEN,}
+func createInfo() purbs.SuiteInfoMap {
+	info := make(purbs.SuiteInfoMap)
+	info[curve25519.NewBlakeSHA256Curve25519(true).String()] = &purbs.SuiteInfo{
+		Positions: []int{12 + 0*purbs.KEYLEN, 12 + 1*purbs.KEYLEN, 12 + 3*purbs.KEYLEN, 12 + 4*purbs.KEYLEN},
+		KeyLen:    purbs.KEYLEN}
 	return info
 }
 
-func createDecoders(n int) []purb.Decoder {
-	decs := make([]purb.Decoder, 0)
-	suites := []purb.Suite{curve25519.NewBlakeSHA256Curve25519(true)}
+func createDecoders(n int) []purbs.Decoder {
+	decs := make([]purbs.Decoder, 0)
+	suites := []purbs.Suite{curve25519.NewBlakeSHA256Curve25519(true)}
 	for _, suite := range suites {
 		for i := 0; i < n; i++ {
 			pair := key.NewKeyPair(suite)
-			decs = append(decs, purb.Decoder{SuiteName: suite.String(), Suite: suite, PublicKey: pair.Public, PrivateKey: pair.Private})
+			decs = append(decs, purbs.Decoder{SuiteName: suite.String(), Suite: suite, PublicKey: pair.Public, PrivateKey: pair.Private})
 		}
 	}
 	return decs
 }
 
-func createMultiInfo(N int) purb.SuiteInfoMap {
-	info := make(purb.SuiteInfoMap)
+func createMultiInfo(N int) purbs.SuiteInfoMap {
+	info := make(purbs.SuiteInfoMap)
 	positions := make([][]int, N+1)
 	suffixes := []string{"", "a", "b", "c", "d", "e", "f", "g", "h", "i"}
 	for k := 0; k < N; k++ {
 		limit := int(math.Ceil(math.Log2(float64(N)))) + 1
 		positions[k] = make([]int, limit)
-		floor := purb.NONCE_LEN
+		floor := purbs.NONCE_LEN
 		for i := 0; i < limit; i++ {
-			positions[k][i] = floor + k%int(math.Pow(2, float64(i)))*purb.KEYLEN
-			floor += int(math.Pow(2, float64(i))) * purb.KEYLEN
+			positions[k][i] = floor + k%int(math.Pow(2, float64(i)))*purbs.KEYLEN
+			floor += int(math.Pow(2, float64(i))) * purbs.KEYLEN
 		}
 		//log.Println(positions[k])
 	}
 	for i := 0; i < N; i++ {
-		info[curve25519.NewBlakeSHA256Curve25519(true).String()+suffixes[i]] = &purb.SuiteInfo{
-			Positions: positions[i], KeyLen: purb.KEYLEN,}
+		info[curve25519.NewBlakeSHA256Curve25519(true).String()+suffixes[i]] = &purbs.SuiteInfo{
+			Positions: positions[i], KeyLen: purbs.KEYLEN}
 	}
 
 	return info
 }
 
-func createMultiDecoders(n int, si purb.SuiteInfoMap) []purb.Decoder {
+func createMultiDecoders(n int, si purbs.SuiteInfoMap) []purbs.Decoder {
 	type suite struct {
 		Name  string
-		Value purb.Suite
+		Value purbs.Suite
 	}
-	decs := make([]purb.Decoder, 0)
+	decs := make([]purbs.Decoder, 0)
 	suites := make([]suite, 0)
 	for name := range si {
 		suites = append(suites, suite{name, curve25519.NewBlakeSHA256Curve25519(true)})
@@ -297,7 +306,7 @@ func createMultiDecoders(n int, si purb.SuiteInfoMap) []purb.Decoder {
 	for n > 0 {
 		for _, suite := range suites {
 			pair := key.NewHidingKeyPair(suite.Value)
-			decs = append(decs, purb.Decoder{SuiteName: suite.Name, Suite: suite.Value, PublicKey: pair.Public, PrivateKey: pair.Private})
+			decs = append(decs, purbs.Decoder{SuiteName: suite.Name, Suite: suite.Value, PublicKey: pair.Public, PrivateKey: pair.Private})
 			n -= 1
 			if n == 0 {
 				break

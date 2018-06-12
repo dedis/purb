@@ -1,4 +1,4 @@
-package simul
+package pgp
 
 import (
 	"bytes"
@@ -6,17 +6,17 @@ import (
 
 	"errors"
 
-	"crypto/rand"
 	"crypto"
+	"crypto/rand"
 
-	"gopkg.in/dedis/onet.v1/log"
-	"github.com/nikirill/go-crypto/openpgp/packet"
+	"crypto/elliptic"
+	"github.com/nikirill/go-crypto/curve25519"
 	"github.com/nikirill/go-crypto/openpgp"
 	"github.com/nikirill/go-crypto/openpgp/armor"
 	"github.com/nikirill/go-crypto/openpgp/ecdh"
-	"github.com/nikirill/go-crypto/curve25519"
+	"github.com/nikirill/go-crypto/openpgp/packet"
+	"gopkg.in/dedis/onet.v1/log"
 	"math/big"
-	"crypto/elliptic"
 )
 
 /*
@@ -35,7 +35,7 @@ func NewPGP() *PGP {
 	public := packet.PublicKey(priv.PublicKey)
 	return &PGP{
 		Private: priv,
-		Public: &public,
+		Public:  &public,
 	}
 }
 
