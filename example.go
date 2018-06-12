@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/hex"
+	"fmt"
 	"github.com/dedis/kyber/group/curve25519"
 	"github.com/dedis/kyber/util/key"
 	"github.com/dedis/kyber/util/random"
@@ -11,13 +13,24 @@ func main() {
 
 	msg := []byte("And presently I was driving through the drizzle of the dying day, with the windshield wipers in full action but unable to cope with my tears.")
 
+	fmt.Println(hex.Dump(msg))
+	fmt.Println()
+
+	// Encode
 	si := createInfo()
 	decs := createDecoders(1)
 	blob, err := purbs.MakePurb(msg, decs, si, purbs.STREAM, false, random.New())
 	if err != nil {
 		panic(err.Error())
 	}
-	purbs.Decode(blob, &decs[0], purbs.STREAM, false, si)
+
+	fmt.Println(hex.Dump(blob))
+	fmt.Println()
+
+	// Decode
+	_, dec, _ := purbs.Decode(blob, &decs[0], purbs.STREAM, false, si)
+
+	fmt.Println(hex.Dump(dec))
 }
 
 func createInfo() purbs.SuiteInfoMap {
