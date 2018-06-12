@@ -1,22 +1,20 @@
-package purb
+package purbs
 
 import (
-	"errors"
-	"crypto/sha256"
-	"log"
-	"encoding/binary"
 	"crypto/aes"
 	"crypto/cipher"
-	"strconv"
-	"sort"
+	"crypto/sha256"
+	"encoding/binary"
+	"errors"
 	"fmt"
-	"syscall"
 	"golang.org/x/crypto/pbkdf2"
+	"log"
+	"sort"
+	"strconv"
+	"syscall"
 
-	"github.com/nikirill/purbs/padding"
-
-	"github.com/dedis/kyber/util/random"
 	"github.com/dedis/kyber/util/key"
+	"github.com/dedis/kyber/util/random"
 )
 
 // Cornerstone - 40 bytes

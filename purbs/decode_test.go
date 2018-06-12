@@ -1,10 +1,10 @@
-package purb
+package purbs
 
 import (
-	"testing"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"github.com/dedis/kyber/util/random"
+	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 func TestDecode(t *testing.T) {

@@ -1,14 +1,14 @@
-package purb
+package purbs
 
 import (
-	"testing"
-	"github.com/stretchr/testify/require"
 	"fmt"
-	"math"
-	"github.com/nikirill/crypto/purb"
-	"github.com/dedis/kyber/util/random"
 	"github.com/dedis/kyber/group/curve25519"
 	"github.com/dedis/kyber/util/key"
+	"github.com/dedis/kyber/util/random"
+	"github.com/nikirill/crypto/purb"
+	"github.com/stretchr/testify/require"
+	"math"
+	"testing"
 )
 
 func TestHeader_GenCornerstones(t *testing.T) {
@@ -86,7 +86,7 @@ func createInfo(N int) SuiteInfoMap {
 	}
 	for i := 0; i < N; i++ {
 		info[curve25519.NewBlakeSHA256Curve25519(true).String()+suffixes[i]] = &SuiteInfo{
-			Positions: positions[i], KeyLen: purb.KEYLEN,}
+			Positions: positions[i], KeyLen: purb.KEYLEN}
 	}
 
 	return info

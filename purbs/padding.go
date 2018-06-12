@@ -1,8 +1,8 @@
-package padding
+package purbs
 
 import (
-	"math"
 	"bytes"
+	"math"
 )
 
 // For the padding we use scheme ISO/IEC 7816-4:2005 as the most space efficient.
@@ -13,7 +13,6 @@ import (
 //The next example shows a padding of just one byte
 //... | DD DD DD DD DD DD DD DD | DD DD DD DD DD DD DD 80 |
 // https://en.wikipedia.org/wiki/Padding_(cryptography)#ISO/IEC_7816-4
-
 
 // The byte value that signals that it's the start of padding.
 const STARTPADBYTE = 0x80
@@ -32,7 +31,7 @@ func Pad(msg []byte, other int) []byte {
 	if padLen < 8 && padLen != 0 {
 		padLen = 1
 	} else {
-		padLen = int(math.Ceil(float64(padLen)/8))
+		padLen = int(math.Ceil(float64(padLen) / 8))
 	}
 	// Padding the message with zeros
 	pad := make([]byte, padLen)
@@ -51,7 +50,7 @@ func paddingLength(msgLen uint64) int {
 	zeroBits := bitsToZero(msgLen)
 	//fmt.Printf("Number of zero bits for msg of len %b is %v\n", msgLen, zeroBits)
 	//Generate a mask that we use to isolate the zeroBits bits of the length (e.g., 11111)
-	for i=0; i<zeroBits; i++ {
+	for i = 0; i < zeroBits; i++ {
 		mask |= 1 << i
 	}
 	paddingNeeded = 1 << zeroBits

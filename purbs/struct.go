@@ -1,4 +1,4 @@
-package purb
+package purbs
 
 import (
 	"github.com/dedis/kyber"
@@ -60,7 +60,7 @@ type Entry struct {
 // Decoder holds information needed to be able to encrypt anything for it
 // PrivateKey is nil for encoder
 type Decoder struct {
-	SuiteName  string
+	SuiteName string
 	Suite
 	PublicKey  kyber.Point
 	PrivateKey kyber.Scalar

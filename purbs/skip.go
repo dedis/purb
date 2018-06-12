@@ -1,5 +1,5 @@
 /* Code credit to Matthew Underwood*/
-package purb
+package purbs
 
 import (
 	"encoding/binary"

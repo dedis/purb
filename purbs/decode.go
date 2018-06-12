@@ -1,14 +1,12 @@
-package purb
+package purbs
 
 import (
-	"errors"
-	"log"
-	"crypto/sha256"
-	"encoding/binary"
 	"crypto/aes"
 	"crypto/cipher"
-
-	"github.com/nikirill/purbs/padding"
+	"crypto/sha256"
+	"encoding/binary"
+	"errors"
+	"log"
 
 	"github.com/dedis/kyber"
 )
@@ -114,7 +112,7 @@ func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap Sui
 
 func verifyDecryption(decrypted []byte, blob []byte) (bool, []byte) {
 	var result bool
-	msgStart := int(binary.BigEndian.Uint32(decrypted[SYMKEYLEN:SYMKEYLEN+OFFSET_POINTER_LEN]))
+	msgStart := int(binary.BigEndian.Uint32(decrypted[SYMKEYLEN : SYMKEYLEN+OFFSET_POINTER_LEN]))
 	if msgStart > len(blob) {
 		return false, nil
 	}
