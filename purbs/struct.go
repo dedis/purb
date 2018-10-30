@@ -19,8 +19,8 @@ type SuiteInfoMap map[string]*SuiteInfo // suite info indexed by suite names
 // SuiteInfo holds possible positions whose cornerstones might take in a header
 // and a key length for this suite
 type SuiteInfo struct {
-	Positions []int // alternative key/point position in purb header
-	KeyLen    int   // length of each key/point in bytes
+	AllowedPositions []int // alternative key/point position in purb header
+	KeyLen           int   // length of each key/point in bytes
 }
 
 // Structure to define the whole PURB
@@ -35,11 +35,11 @@ type Purb struct {
 
 // Structure defining the actual header of a purb
 type Header struct {
-	SuitesToEntries     map[string][]*Entry     // List of entrypoints
-	SuitesToCornerstone map[string]*Cornerstone // Holds sender's ephemeral private/public keys for each suite in the header
-	Layout              SkipLayout              // An array of byte slices where each of the bytes slice represents a hash table entry
-	Length              int                     //
-	EntryLen            int                     // Length of each encrypted entry point
+	EntryPoints      map[string][]*EntryPoint // List of entrypoints
+	Cornerstones     map[string]*Cornerstone  // Holds sender's ephemeral private/public keys for each suite in the header
+	Layout           SkipLayout               // An array of byte slices where each of the bytes slice represents a hash table entry
+	Length           int                      //
+	EntryPointLength int                      // Length of each encrypted entry point
 }
 
 // Ephemeral Diffie-Hellman keys for all key-holders using this suite.
@@ -50,16 +50,16 @@ type Cornerstone struct {
 	Offset    int // Starting byte position in the header
 }
 
-//Entry holds the info required to create an entrypoint for each recipient.
-type Entry struct {
-	Recipient    Decoder // Recipient whom this entrypoint is for
-	SharedSecret []byte  // Ephemeral secret derived from negotiated DH secret
-	Offset       int     // Starting byte position in the header
+//EntryPoint holds the info required to create an entrypoint for each recipient.
+type EntryPoint struct {
+	Recipient    Recipient // Recipient whom this entrypoint is for
+	SharedSecret []byte    // Ephemeral secret derived from negotiated DH secret
+	Offset       int       // Starting byte position in the header
 }
 
-// Decoder holds information needed to be able to encrypt anything for it
+// Recipient holds information needed to be able to encrypt anything for it
 // PrivateKey is nil for encoder
-type Decoder struct {
+type Recipient struct {
 	SuiteName string
 	Suite
 	PublicKey  kyber.Point

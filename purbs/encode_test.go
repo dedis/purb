@@ -5,7 +5,6 @@ import (
 	"github.com/dedis/kyber/group/curve25519"
 	"github.com/dedis/kyber/util/key"
 	"github.com/dedis/kyber/util/random"
-	//"github.com/nikirill/crypto/purb"
 	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
@@ -17,10 +16,10 @@ func TestHeader_GenCornerstones(t *testing.T) {
 	h := NewEmptyHeader()
 	si := createInfo(3)
 	decoders := createDecoders(6, si)
-	h.genCornerstones(decoders, si, random.New())
-	for _, stone := range h.SuitesToCornerstone {
+	h.createCornerStoneAndEntryPoints(decoders, si, random.New())
+	for _, stone := range h.Cornerstones {
 		//fmt.Println(hex.EncodeToString(stone.Encoded))
-		require.Equal(t, stone.KeyPair.Hiding.HideLen(), KEYLEN)
+		require.Equal(t, stone.KeyPair.Hiding.HideLen(), CORNERSTONE_LENGTH)
 		require.NotEqual(t, stone.KeyPair.Private, nil)
 		require.NotEqual(t, stone.KeyPair.Public, nil)
 	}
@@ -37,7 +36,7 @@ func TestPurb_ConstructHeader(t *testing.T) {
 	}
 	si := createInfo(3)
 	decs := createDecoders(6, si)
-	purb.ConstructHeader(decs, si, STREAM, false, random.New())
+	purb.CreateHeader(decs, si, STREAM, false, random.New())
 	//fmt.Println("Content of the entries:")
 	//for _, cell := range purb.Header.Layout {
 	//	fmt.Println(hex.EncodeToString(cell))
@@ -56,7 +55,7 @@ func TestPurb_Write(t *testing.T) {
 	decs := createDecoders(6, si)
 	data := []byte("gorilla")
 	// Normal
-	purb.ConstructHeader(decs, si, STREAM, false, random.New())
+	purb.CreateHeader(decs, si, STREAM, false, random.New())
 	purb.PadThenEncryptData(data, random.New())
 	purb.Write(si, STREAM, random.New())
 	// Simplified
@@ -64,7 +63,7 @@ func TestPurb_Write(t *testing.T) {
 	if err != nil {
 		panic(err.Error())
 	}
-	purb.ConstructHeader(decs, si, STREAM, true, random.New())
+	purb.CreateHeader(decs, si, STREAM, true, random.New())
 	purb.PadThenEncryptData(data, random.New())
 	purb.Write(si, STREAM, random.New())
 
@@ -77,27 +76,27 @@ func createInfo(N int) SuiteInfoMap {
 	for k := 0; k < N; k++ {
 		limit := int(math.Ceil(math.Log2(float64(N)))) + 1
 		positions[k] = make([]int, limit)
-		floor := NONCE_LEN
+		floor := AEAD_NONCE_LENGTH
 		for i := 0; i < limit; i++ {
-			positions[k][i] = floor + k%int(math.Pow(2, float64(i)))*KEYLEN
-			floor += int(math.Pow(2, float64(i))) * KEYLEN
+			positions[k][i] = floor + k%int(math.Pow(2, float64(i)))*CORNERSTONE_LENGTH
+			floor += int(math.Pow(2, float64(i))) * CORNERSTONE_LENGTH
 		}
 		//log.Println(positions[k])
 	}
 	for i := 0; i < N; i++ {
 		info[curve25519.NewBlakeSHA256Curve25519(true).String()+suffixes[i]] = &SuiteInfo{
-			Positions: positions[i], KeyLen: KEYLEN}
+			AllowedPositions: positions[i], KeyLen: CORNERSTONE_LENGTH}
 	}
 
 	return info
 }
 
-func createDecoders(n int, si SuiteInfoMap) []Decoder {
+func createDecoders(n int, si SuiteInfoMap) []Recipient {
 	type suite struct {
 		Name  string
 		Value Suite
 	}
-	decs := make([]Decoder, 0)
+	decs := make([]Recipient, 0)
 	suites := make([]suite, 0)
 	for name := range si {
 		suites = append(suites, suite{name, curve25519.NewBlakeSHA256Curve25519(true)})
@@ -105,7 +104,7 @@ func createDecoders(n int, si SuiteInfoMap) []Decoder {
 	for i := 0; i < n; i++ {
 		for _, suite := range suites {
 			pair := key.NewHidingKeyPair(suite.Value)
-			decs = append(decs, Decoder{SuiteName: suite.Name, Suite: suite.Value, PublicKey: pair.Public, PrivateKey: pair.Private})
+			decs = append(decs, Recipient{SuiteName: suite.Name, Suite: suite.Value, PublicKey: pair.Public, PrivateKey: pair.Private})
 		}
 	}
 	return decs
