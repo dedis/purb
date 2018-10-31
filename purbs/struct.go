@@ -3,6 +3,7 @@ package purbs
 import (
 	"github.com/dedis/kyber"
 	"github.com/dedis/kyber/util/key"
+	"crypto/cipher"
 )
 
 // Suite defines the required functionalities for each suite from kyber
@@ -17,20 +18,26 @@ type Suite interface {
 type SuiteInfoMap map[string]*SuiteInfo // suite info indexed by suite names
 
 // SuiteInfo holds possible positions whose cornerstones might take in a header
-// and a key length for this suite
+// and a PayloadKey length for this suite
 type SuiteInfo struct {
-	AllowedPositions []int // alternative key/point position in purb header
-	KeyLen           int   // length of each key/point in bytes
+	AllowedPositions []int // alternative PayloadKey/point position in purb header
+	KeyLen           int   // length of each PayloadKey/point in bytes
 }
 
 // Structure to define the whole PURB
 type Purb struct {
 	Nonce []byte // Nonce used in both AEAD of entrypoints and payload. The same for different entrypoints
 	// as the keys are different. It is stored in the very beginning of the purb
-	Header  *Header
-	Payload []byte // Payload contains already padded plaintext
-	key     []byte // Payload key
-	buf     []byte // Buffer to store intermediate binary representation of purb
+	Header     *Header
+	Payload    []byte // Payload contains already padded plaintext
+	PayloadKey []byte // Payload PayloadKey
+
+	isVerbose  bool // If true, the various operations on the data structure will print what is happening
+
+	recipients []Recipient
+	infoMap SuiteInfoMap
+	symmKeyWrapType SYMMETRIC_KEY_WRAPPER_TYPE
+	stream cipher.Stream
 }
 
 // Structure defining the actual header of a purb
@@ -42,7 +49,7 @@ type Header struct {
 	EntryPointLength int                      // Length of each encrypted entry point
 }
 
-// Ephemeral Diffie-Hellman keys for all key-holders using this suite.
+// Ephemeral Diffie-Hellman keys for all PayloadKey-holders using this suite.
 // Should have a uniform representation, e.g., an Elligator point.
 type Cornerstone struct {
 	SuiteName string

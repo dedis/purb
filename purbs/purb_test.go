@@ -10,14 +10,34 @@ import (
 	"testing"
 )
 
-func TestHeader_GenCornerstones(t *testing.T) {
-	fmt.Println("=================TEST Generate Cornerstones=================")
-	//info := createInfo()
-	h := NewEmptyHeader()
-	si := createInfo(3)
-	decoders := createDecoders(6, si)
-	h.createCornerStoneAndEntryPoints(decoders, si, random.New())
-	for _, stone := range h.Cornerstones {
+func TestGenCornerstones(t *testing.T) {
+	purb := &Purb{
+		Nonce:      nil,
+		Header: nil,
+		Payload: nil,
+		PayloadKey: nil,
+
+		isVerbose: true,
+		recipients: nil,
+		infoMap: nil,
+		symmKeyWrapType: STREAM,
+		stream: random.New(),
+	}
+
+	purb.infoMap = createInfo(3)
+	purb.recipients = createDecoders(6, purb.infoMap)
+
+	purb.Header = newEmptyHeader()
+	switch purb.symmKeyWrapType {
+	case STREAM:
+		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
+	case AEAD:
+		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN + MAC_AUTHENTICATION_TAG_LENGTH
+	}
+
+	purb.createCornerStoneAndEntryPoints()
+
+	for _, stone := range purb.Header.Cornerstones {
 		//fmt.Println(hex.EncodeToString(stone.Encoded))
 		require.Equal(t, stone.KeyPair.Hiding.HideLen(), CORNERSTONE_LENGTH)
 		require.NotEqual(t, stone.KeyPair.Private, nil)
@@ -25,49 +45,57 @@ func TestHeader_GenCornerstones(t *testing.T) {
 	}
 }
 
-func TestPurb_ConstructHeader(t *testing.T) {
-	fmt.Println("=================TEST Construct Header=================")
-	// Generate payload key and global nonce. It could be passed by an application above
-	key := "key16key16key16!"
-	nonce := "noncenonce12"
-	purb, err := NewPurb([]byte(key), []byte(nonce))
+func TestPurbCreation(t *testing.T) {
+
+	data := []byte("SomeInfo")
+	infoMap := createInfo(3)
+	recipients := createDecoders(6, infoMap)
+
+	purb, err := PURBEncode(data, recipients, infoMap, STREAM, random.New(), true, true)
+
 	if err != nil {
-		panic(err.Error())
+		t.Error(err)
 	}
-	si := createInfo(3)
-	decs := createDecoders(6, si)
-	purb.CreateHeader(decs, si, STREAM, false, random.New())
-	//fmt.Println("Content of the entries:")
-	//for _, cell := range purb.Header.Layout {
-	//	fmt.Println(hex.EncodeToString(cell))
-	//}
+
+	fmt.Printf("%+v\n", purb)
 }
 
-func TestPurb_Write(t *testing.T) {
-	fmt.Println("=================TEST PURB Write=================")
-	key := "key16key16key16!"
-	nonce := "noncenonce12"
-	purb, err := NewPurb([]byte(key), []byte(nonce))
-	if err != nil {
-		panic(err.Error())
-	}
-	si := createInfo(3)
-	decs := createDecoders(6, si)
-	data := []byte("gorilla")
+func TestEncodeDecode(t *testing.T) {
+	si := createInfo(1)
+	decs := createDecoders(3, si)
+	data := []byte("gorilla here, gorilla there, I am not going anywhere")
 	// Normal
-	purb.CreateHeader(decs, si, STREAM, false, random.New())
-	purb.PadThenEncryptData(data, random.New())
-	purb.Write(si, STREAM, random.New())
-	// Simplified
-	purb, err = NewPurb([]byte(key), []byte(nonce))
+	blob, err := PURBEncode(data, decs, si, STREAM, random.New(), false, true)
 	if err != nil {
 		panic(err.Error())
 	}
-	purb.CreateHeader(decs, si, STREAM, true, random.New())
-	purb.PadThenEncryptData(data, random.New())
-	purb.Write(si, STREAM, random.New())
-
+	success, message, err := PURBDecode(blob, &decs[5], STREAM, false, si)
+	if err != nil {
+		panic(err.Error())
+	}
+	require.True(t, success)
+	require.Equal(t, data, message)
 }
+
+func TestEncodeDecodeSimplified(t *testing.T) {
+	si := createInfo(3)
+	decs := createDecoders(10, si)
+	data := []byte("gorilla here, gorilla there, I am not going anywhere")
+
+	// Simplified
+	blob, err := PURBEncode(data, decs, si, STREAM, random.New(), true, true)
+	if err != nil {
+		panic(err.Error())
+	}
+	success, message, err := PURBDecode(blob, &decs[5], STREAM, true, si)
+	fmt.Println(success, message, err)
+	if err != nil {
+		panic(err.Error())
+	}
+	require.True(t, success)
+	require.Equal(t, data, message)
+}
+
 
 func createInfo(N int) SuiteInfoMap {
 	info := make(SuiteInfoMap)
