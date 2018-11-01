@@ -6,32 +6,44 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
-	"log"
-	"sort"
-	"strconv"
 	"github.com/dedis/kyber/util/key"
 	"github.com/dedis/kyber/util/random"
-	"fmt"
+	"github.com/dedis/onet/log"
+	"sort"
+	"strconv"
 )
 
+// Length (in bytes) of the symmetric key used to encrypt the payload
 const SYMMETRIC_KEY_LENGTH = 16
+
+// Length (in bytes) of the pointer to the start of the payload
 const OFFSET_POINTER_LEN = 4
+
+// Length (in bytes) of the Nonce used at the beginning of the PURB
 const AEAD_NONCE_LENGTH = 12
+
+// Length (in bytes) of the MAC tag in the entry point (only used with entrypoints are encrypted with AEAD)
 const MAC_AUTHENTICATION_TAG_LENGTH = SYMMETRIC_KEY_LENGTH
-// for simplicity assuming all suites HideLen is the same).
+
+// Length (in bytes) of the Cornerstones (for simplicity assuming all suites HideLen is the same).
 const CORNERSTONE_LENGTH = 32
 
 // Approaches to wrap a symmetric PayloadKey used to encrypt the payload
 type SYMMETRIC_KEY_WRAPPER_TYPE int8
+
 const (
-	STREAM SYMMETRIC_KEY_WRAPPER_TYPE = iota // encrypt symmetric PayloadKey with a stream cipher
-	AEAD  // encrypt symmetric PayloadKey with a AEAD
+	// STREAM encrypts the entrypoint with a stream cipher
+	STREAM SYMMETRIC_KEY_WRAPPER_TYPE = iota
+
+	// AEAD encrypt the entrypoint with a AEAD. Not supported yet!
+	AEAD
 )
 
 // Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
 var HASHTABLE_COLLISION_LINEAR_PLACEMENT_ATTEMPTS = 3
 
-func PURBEncode(data []byte, recipients []Recipient, infoMap SuiteInfoMap, keywrap SYMMETRIC_KEY_WRAPPER_TYPE, stream cipher.Stream, simplifiedEntryPointTable bool, verbose bool) ([]byte, error) {
+// Creates a PURB from some data and recipients information
+func PURBEncode(data []byte, recipients []Recipient, infoMap SuiteInfoMap, keywrap SYMMETRIC_KEY_WRAPPER_TYPE, stream cipher.Stream, simplifiedEntryPointTable bool, verbose bool) (*Purb, error) {
 
 	// generate payload PayloadKey and global nonce. It could be passed by an application above
 	key := make([]byte, SYMMETRIC_KEY_LENGTH)
@@ -50,19 +62,24 @@ func PURBEncode(data []byte, recipients []Recipient, infoMap SuiteInfoMap, keywr
 	// create the PURB datastructure
 	purb := &Purb{
 		Nonce:      nonce,
-		Header: nil,
-		Payload: nil,
+		Header:     nil,
+		Payload:    nil,
 		PayloadKey: key,
 
-		isVerbose: verbose,
-		recipients: recipients,
-		infoMap: infoMap,
+		isVerbose:       verbose,
+		recipients:      recipients,
+		infoMap:         infoMap,
 		symmKeyWrapType: keywrap,
-		stream: stream,
+		stream:          stream,
+		originalData:    data, // just for statistics
 	}
 
-	if verbose {
-		fmt.Printf("Created an empty PURB %+v\n", purb)
+	if purb.isVerbose {
+		log.LLvlf3("Created an empty PURB, original data %v, payload key %v, nonce %v", data, key, nonce)
+		log.LLvlf3("Recipients %+v", recipients)
+		for i := range infoMap {
+			log.LLvlf3("infoMap [%v]: len %v, positions %+v", i, infoMap[i].CornerstoneLength, infoMap[i].AllowedPositions)
+		}
 	}
 
 	purb.Header = newEmptyHeader()
@@ -73,7 +90,7 @@ func PURBEncode(data []byte, recipients []Recipient, infoMap SuiteInfoMap, keywr
 		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN + MAC_AUTHENTICATION_TAG_LENGTH
 	}
 
-	purb.createCornerStoneAndEntryPoints()
+	purb.createCornerstonesAndEntrypoints()
 	purb.computeSharedSecrets()
 
 	purb.Header.Layout.Reset()
@@ -92,11 +109,13 @@ func PURBEncode(data []byte, recipients []Recipient, infoMap SuiteInfoMap, keywr
 		return nil, err
 	}
 
-	return purb.ToBytes(), nil
+	// Here, things are placed where they should; only the final XORing step for entrypoint needs to be done (in "ToBytes")
+
+	return purb, nil
 }
 
 // Find what unique suites used by the Recipients, generate a private for each of these suites, and assign them to corresponding entry points
-func (purb *Purb) createCornerStoneAndEntryPoints() {
+func (purb *Purb) createCornerstonesAndEntrypoints() {
 
 	recipients := purb.recipients
 	header := purb.Header
@@ -126,7 +145,7 @@ func (purb *Purb) createCornerStoneAndEntryPoints() {
 				continue
 			}
 
-			if keyPair.Hiding.HideLen() != purb.infoMap[recipient.SuiteName].KeyLen {
+			if keyPair.Hiding.HideLen() != purb.infoMap[recipient.SuiteName].CornerstoneLength {
 				log.Fatal("Length of elligator Encoded PayloadKey is not what we expect. It's ", keyPair.Hiding.HideLen())
 			}
 
@@ -135,10 +154,11 @@ func (purb *Purb) createCornerStoneAndEntryPoints() {
 		}
 
 		// register a new cornerstone for this suite
-		header.Cornerstones[recipient.SuiteName] = &Cornerstone{
-			SuiteName: recipient.SuiteName,
-			KeyPair:   keyPair,
-			Offset:    -1, // we don't know this yet
+		cornerstone := purb.newCornerStone(recipient.SuiteName, keyPair)
+		header.Cornerstones[recipient.SuiteName] = cornerstone
+
+		if purb.isVerbose {
+			log.LLvlf3("Created cornerstone[%v], value %v", recipient.SuiteName, cornerstone.Bytes)
 		}
 	}
 }
@@ -169,6 +189,10 @@ func (purb *Purb) computeSharedSecrets() {
 			}
 			// Derive a PayloadKey using KDF
 			purb.Header.EntryPoints[suiteName][i].SharedSecret = KDF(sharedBytes)
+
+			if purb.isVerbose {
+				log.LLvlf3("Shared secret with suite=%v, entrypoint[%v], value %v", suiteName, i, sharedBytes)
+			}
 
 			//h.EntryPoints[suiteName][i].SharedSecret, _ = sharedKey.MarshalBinary()
 			//fmt.Printf("Shared secret: %x and length is %d\n", h.EntryPoints[suiteName][i].SharedSecret,
@@ -202,10 +226,10 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 	// Sort the cornerstones such as the ones with the longest PayloadKey length are placed first.
 	// If the lengths are equal, then the sort is lexicographic
 	sort.Slice(cornerstones, func(i, j int) bool {
-		if cornerstones[i].KeyPair.Hiding.HideLen() > cornerstones[j].KeyPair.Hiding.HideLen() {
+		if len(cornerstones[i].Bytes) > len(cornerstones[j].Bytes) {
 			return true
 		}
-		if cornerstones[i].KeyPair.Hiding.HideLen() == cornerstones[j].KeyPair.Hiding.HideLen() {
+		if len(cornerstones[i].Bytes) == len(cornerstones[j].Bytes) {
 			return cornerstones[i].SuiteName < cornerstones[j].SuiteName
 		}
 		return false
@@ -227,7 +251,7 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 		for j := primary - 1; j >= 0; j-- {
 
 			startPos := suiteInfo.AllowedPositions[j]
-			endPos := startPos + suiteInfo.KeyLen
+			endPos := startPos + suiteInfo.CornerstoneLength
 			if excludeLayout.Reserve(startPos, endPos, false, cornerstone.SuiteName) && j == primary-1 {
 				//log.Printf("Reserving [%d-%d] for suite %s\n", startPos, endPos, cornerstone.SuiteName)
 				primary = j // no conflict, shift down
@@ -243,6 +267,11 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 		if endBit > purb.Header.Length {
 			purb.Header.Length = endBit
 		}
+
+		if purb.isVerbose {
+			log.LLvlf3("Found position for cornerstone %v, start %v, end %v", cornerstone.SuiteName, startBit, endBit)
+		}
+
 		//log.Printf("reserving [%d-%d] for suite %s\n", startBit, endBit, cornerstone.SuiteName)
 		if !purb.Header.Layout.Reserve(startBit, endBit, true, cornerstone.SuiteName) {
 			panic("thought we had that position reserved??")
@@ -258,7 +287,7 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 		for entrypointID, entrypoint := range purb.Header.EntryPoints[suite] {
 
 			//hash table initialStartPos right after the cornerstone's offset-0
-			initialStartPos := purb.infoMap[suite].AllowedPositions[0] + purb.infoMap[suite].KeyLen
+			initialStartPos := purb.infoMap[suite].AllowedPositions[0] + purb.infoMap[suite].CornerstoneLength
 
 			//initial hash table size
 			tableSize := 1
@@ -273,19 +302,23 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 				for j := 0; j < HASHTABLE_COLLISION_LINEAR_PLACEMENT_ATTEMPTS; j++ {
 					posInHashTable = (intOfHashedValue + j) % tableSize
 
-					effectiveStartPos := initialStartPos + posInHashTable * purb.Header.EntryPointLength
-					effectiveEndPos := initialStartPos + (posInHashTable+1) * purb.Header.EntryPointLength
+					effectiveStartPos := initialStartPos + posInHashTable*purb.Header.EntryPointLength
+					effectiveEndPos := initialStartPos + (posInHashTable+1)*purb.Header.EntryPointLength
 
 					if purb.Header.Layout.Reserve(effectiveStartPos, effectiveEndPos, true, "hash"+strconv.Itoa(tableSize)) {
 						purb.Header.EntryPoints[suite][entrypointID].Offset = effectiveStartPos
 						positionFound = true
-						//log.Printf("Placing entrypoint at [%d-%d]", initialStartPos+posInHashTable*h.EntryPointLength, initialStartPos+(posInHashTable+1)*h.EntryPointLength)
+
+						if purb.isVerbose {
+							log.LLvlf3("Found position for entrypoint %v of suite %v, table size %v, linear %v, start %v, end %v", entrypointID, suite, tableSize, j, effectiveStartPos, effectiveEndPos)
+						}
+
 						break
 					}
 				}
 				if positionFound {
 					// save end of the current table as the length of the header
-					effectiveEndPos := initialStartPos + (posInHashTable+1) * purb.Header.EntryPointLength
+					effectiveEndPos := initialStartPos + (posInHashTable+1)*purb.Header.EntryPointLength
 					if effectiveEndPos > purb.Header.Length {
 						purb.Header.Length = effectiveEndPos
 					}
@@ -306,12 +339,17 @@ func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
 	for _, suite := range orderedSuites {
 		for entryPointID := range purb.Header.EntryPoints[suite] {
 			//hash table startPos right after the cornerstone's offset-0
-			startPos := purb.infoMap[suite].AllowedPositions[0] + purb.infoMap[suite].KeyLen
+			startPos := purb.infoMap[suite].AllowedPositions[0] + purb.infoMap[suite].CornerstoneLength
 
 			for {
 				if purb.Header.Layout.Reserve(startPos, startPos+purb.Header.EntryPointLength, true, "hash"+strconv.Itoa(startPos)) {
 					purb.Header.EntryPoints[suite][entryPointID].Offset = startPos
 					endPos := startPos + purb.Header.EntryPointLength
+
+					if purb.isVerbose {
+						log.LLvlf3("Found position for entrypoint %v of suite %v, SIMPLIFIED, start %v, end %v", entryPointID, suite, startPos, endPos)
+					}
+
 					if endPos > purb.Header.Length {
 						purb.Header.Length = endPos
 					}
@@ -327,14 +365,23 @@ func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
 
 // padThenEncryptData takes plaintext data as a byte slice, pads it using PURBs padding scheme,
 // and then encrypts using AEAD encryption scheme
-func (p *Purb) padThenEncryptData(data []byte, stream cipher.Stream) error {
+func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) error {
 	var err error
-	paddedData := Pad(data, p.Header.Length+MAC_AUTHENTICATION_TAG_LENGTH)
-	p.Payload, err = aeadEncrypt(paddedData, p.Nonce, p.PayloadKey, nil, stream)
-	if err != nil {
-		log.Fatalln(err)
+	paddedData := Pad(data, purb.Header.Length+MAC_AUTHENTICATION_TAG_LENGTH)
+
+	if purb.isVerbose {
+		log.LLvlf3("Payload padded from %v to %v bytes", len(data), len(paddedData))
 	}
-	//fmt.Print(paddedData)
+
+	purb.Payload, err = aeadEncrypt(paddedData, purb.Nonce, purb.PayloadKey, nil, stream)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	if purb.isVerbose {
+		log.LLvlf3("Payload padded encrypted to %v (len %v)", purb.Payload, len(purb.Payload))
+	}
+
 	return nil
 }
 
@@ -361,6 +408,126 @@ func aeadEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]b
 	return encrypted, nil
 }
 
+// ToBytes writes content of entrypoints and encrypted payloads into contiguous buffer
+func (purb *Purb) ToBytes() []byte {
+
+	buffer := new(GrowableBuffer)
+
+	// copy nonce
+	if len(purb.Nonce) != 0 {
+		region := buffer.growAndGetRegion(0, AEAD_NONCE_LENGTH)
+		copy(region, purb.Nonce)
+
+		if purb.isVerbose {
+			log.LLvlf3("Adding nonce in [%v:%v], value %v, len %v", 0, AEAD_NONCE_LENGTH, purb.Nonce, len(purb.Nonce))
+		}
+	}
+
+	// copy cornerstones
+	for _, cornerstone := range purb.Header.Cornerstones {
+		startPos := cornerstone.Offset
+		length := len(cornerstone.Bytes)
+		endPos := cornerstone.Offset + length
+
+		region := buffer.growAndGetRegion(startPos, endPos)
+		copy(region, cornerstone.Bytes)
+
+		if purb.isVerbose {
+			log.LLvlf3("Adding cornerstone in [%v:%v], value %v, len %v", startPos, endPos, cornerstone.Bytes, length)
+		}
+	}
+
+	// encrypt and copy entrypoints
+	payloadOffset := make([]byte, OFFSET_POINTER_LEN)
+	binary.BigEndian.PutUint32(payloadOffset, uint32(purb.Header.Length))
+
+	entrypointContent := append(purb.PayloadKey, payloadOffset...)
+	for _, entrypointsPerSuite := range purb.Header.EntryPoints {
+		for _, entrypoint := range entrypointsPerSuite {
+			switch purb.symmKeyWrapType {
+			case STREAM:
+				// we use shared secret as a seed to a stream cipher
+				xof := entrypoint.Recipient.Suite.XOF(entrypoint.SharedSecret)
+				startPos := entrypoint.Offset
+				endPos := startPos + purb.Header.EntryPointLength
+
+				region := buffer.growAndGetRegion(startPos, endPos)
+				xof.XORKeyStream(region, entrypointContent)
+
+				if purb.isVerbose {
+					log.LLvlf3("Adding entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v", startPos, endPos, entrypointContent, region, entrypoint.SharedSecret, len(entrypointContent))
+				}
+			case AEAD:
+				panic("not implemented")
+			}
+		}
+	}
+
+	// Fill all unused parts of the header with random bits.
+	fillRndFunction := func(low, high int) {
+		region := buffer.growAndGetRegion(low, high)
+		purb.stream.XORKeyStream(region, region)
+
+		if purb.isVerbose {
+			log.LLvlf3("Adding random bytes in [%v:%v]", low, high)
+		}
+	}
+	purb.Header.Layout.scanFree(fillRndFunction, buffer.length())
+
+	//log.Printf("Final length of header: %d", len(p.buf))
+	//log.Printf("Random with header: %x", p.buf)
+
+	// copy message into buffer
+
+	if purb.isVerbose {
+		log.LLvlf3("Adding payload in [%v:%v], value %v, len %v", buffer.length(), buffer.length()+len(purb.Payload), purb.Payload, len(purb.Payload))
+	}
+	buffer.append(purb.Payload)
+
+	// sort cornerstone by order of apparition in the header
+	cornerstones := make([]*Cornerstone, 0)
+	for _, stone := range purb.Header.Cornerstones {
+		cornerstones = append(cornerstones, stone)
+	}
+	sort.Slice(cornerstones, func(i, j int) bool {
+		return cornerstones[i].Offset < cornerstones[j].Offset
+	})
+
+	// XOR each cornerstone with the data in its non-selected positions, and save as the cornerstone value
+	// (hence, the XOR of all positions = the cornerstone)
+	for _, cornerstone := range cornerstones {
+
+		cornerstoneLength := len(cornerstone.Bytes)
+		xorOfAllPositions := make([]byte, cornerstoneLength)
+
+		for _, cornerstoneAllowedPos := range purb.infoMap[cornerstone.SuiteName].AllowedPositions {
+			endPos := cornerstoneAllowedPos + cornerstoneLength
+
+			// check that we have data at non-primary positions to xor
+			if endPos > buffer.length() {
+				if cornerstoneAllowedPos > buffer.length() {
+					// the position is fully outside the blob; we skip this cornerstone
+					break
+				} else {
+					// the position is partially inside the blob; take only this
+					endPos = buffer.length()
+				}
+			}
+			region := buffer.slice(cornerstoneAllowedPos, endPos)
+
+			for b := 0; b < cornerstoneLength; b++ {
+				xorOfAllPositions[b] ^= region[b]
+			}
+		}
+
+		// copy the result of XOR to the primary position
+		startPos := cornerstone.Offset
+		endPos := startPos + cornerstoneLength
+		buffer.copyInto(startPos, endPos, xorOfAllPositions)
+	}
+	return buffer.toBytes()
+}
+
 func newEntryPoint(recipient Recipient) *EntryPoint {
 	return &EntryPoint{
 		Recipient:    recipient,
@@ -371,16 +538,25 @@ func newEntryPoint(recipient Recipient) *EntryPoint {
 
 func newEmptyHeader() *Header {
 	return &Header{
-		EntryPoints:  make(map[string][]*EntryPoint),
-		Cornerstones: make(map[string]*Cornerstone),
-		Length:       0,
+		EntryPoints:      make(map[string][]*EntryPoint),
+		Cornerstones:     make(map[string]*Cornerstone),
+		Length:           0,
 		EntryPointLength: 0,
+	}
+}
+
+func (purb *Purb) newCornerStone(suiteName string, keyPair *key.Pair) *Cornerstone {
+	return &Cornerstone{
+		SuiteName: suiteName,
+		Offset:    -1,
+		KeyPair:   keyPair, // do not call Hiding.HideEncode on this! it has been done already. Use bytes
+		Bytes:     keyPair.Hiding.HideEncode(purb.stream),
 	}
 }
 
 // Return the byte-range for a point at a given level.
 func (si *SuiteInfo) region(level int) (int, int) {
 	low := si.AllowedPositions[level]
-	high := low + si.KeyLen
+	high := low + si.CornerstoneLength
 	return low, high
 }

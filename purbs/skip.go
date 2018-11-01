@@ -1,5 +1,6 @@
-/* Code credit to Matthew Underwood*/
 package purbs
+
+/* Code credit to Matthew Underwood*/
 
 import (
 	"encoding/binary"
@@ -22,7 +23,8 @@ func skipHeight() int {
 	return height
 }
 
-// low - start, high - end, suc - next
+// low - start, high - end, s
+// uc - next
 type skipNode struct {
 	low, high int
 	suc       []*skipNode
@@ -36,6 +38,7 @@ type SkipLayout struct {
 	head []*skipNode
 }
 
+// Marks all regions as free
 func (sl *SkipLayout) Reset() {
 	sl.head = make([]*skipNode, 1) // minimum stack height
 }

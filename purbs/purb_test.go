@@ -1,10 +1,10 @@
 package purbs
 
 import (
-	"fmt"
 	"github.com/dedis/kyber/group/curve25519"
 	"github.com/dedis/kyber/util/key"
 	"github.com/dedis/kyber/util/random"
+	"github.com/dedis/onet/log"
 	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
@@ -13,19 +13,19 @@ import (
 func TestGenCornerstones(t *testing.T) {
 	purb := &Purb{
 		Nonce:      nil,
-		Header: nil,
-		Payload: nil,
+		Header:     nil,
+		Payload:    nil,
 		PayloadKey: nil,
 
-		isVerbose: true,
-		recipients: nil,
-		infoMap: nil,
+		isVerbose:       true,
+		recipients:      nil,
+		infoMap:         nil,
 		symmKeyWrapType: STREAM,
-		stream: random.New(),
+		stream:          random.New(),
 	}
 
-	purb.infoMap = createInfo(3)
-	purb.recipients = createDecoders(6, purb.infoMap)
+	purb.infoMap = getDummySuiteInfo(3)
+	purb.recipients = createRecipients(6, purb.infoMap)
 
 	purb.Header = newEmptyHeader()
 	switch purb.symmKeyWrapType {
@@ -35,10 +35,9 @@ func TestGenCornerstones(t *testing.T) {
 		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN + MAC_AUTHENTICATION_TAG_LENGTH
 	}
 
-	purb.createCornerStoneAndEntryPoints()
+	purb.createCornerstonesAndEntrypoints()
 
 	for _, stone := range purb.Header.Cornerstones {
-		//fmt.Println(hex.EncodeToString(stone.Encoded))
 		require.Equal(t, stone.KeyPair.Hiding.HideLen(), CORNERSTONE_LENGTH)
 		require.NotEqual(t, stone.KeyPair.Private, nil)
 		require.NotEqual(t, stone.KeyPair.Public, nil)
@@ -48,8 +47,8 @@ func TestGenCornerstones(t *testing.T) {
 func TestPurbCreation(t *testing.T) {
 
 	data := []byte("SomeInfo")
-	infoMap := createInfo(3)
-	recipients := createDecoders(6, infoMap)
+	infoMap := getDummySuiteInfo(2)
+	recipients := createRecipients(1, infoMap)
 
 	purb, err := PURBEncode(data, recipients, infoMap, STREAM, random.New(), true, true)
 
@@ -57,50 +56,117 @@ func TestPurbCreation(t *testing.T) {
 		t.Error(err)
 	}
 
-	fmt.Printf("%+v\n", purb)
+	log.Lvl1(purb.visualRepresentation(true))
 }
 
 func TestEncodeDecode(t *testing.T) {
-	si := createInfo(1)
-	decs := createDecoders(3, si)
-	data := []byte("gorilla here, gorilla there, I am not going anywhere")
-	// Normal
-	blob, err := PURBEncode(data, decs, si, STREAM, random.New(), false, true)
-	if err != nil {
-		panic(err.Error())
+
+	simplified := false
+	verbose := false
+	stream := random.New()
+	keyWrapperType := STREAM
+
+	maxSuites := 10
+	maxRecipients := 10
+
+	if testing.Short() {
+		maxSuites = 3
+		maxRecipients = 3
 	}
-	success, message, err := PURBDecode(blob, &decs[5], STREAM, false, si)
-	if err != nil {
-		panic(err.Error())
+
+	data := []byte("01234567")
+
+	for nSuites := 1; nSuites < maxSuites; nSuites++ {
+		for nRecipients := 1; nRecipients < maxRecipients; nRecipients++ {
+
+			log.Lvl1("Testing for", nSuites, "suites and", nRecipients, "recipients")
+			suitesInfo := getDummySuiteInfo(nSuites)
+			recipients := createRecipients(nRecipients, suitesInfo)
+
+			// try encode
+			purb, err := PURBEncode(data, recipients, suitesInfo, keyWrapperType, stream, simplified, verbose)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// try parse to bits
+			blob := purb.ToBytes()
+
+			// print for fun
+			//log.Lvl1(purb.visualRepresentation(true))
+
+			// try decode
+			for recipientsID := 0; recipientsID < nRecipients; recipientsID++ {
+				log.Lvl1("Decrypting for recipient", recipientsID)
+				success, message, err := PURBDecode(blob, &recipients[0], keyWrapperType, simplified, suitesInfo, verbose)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				require.True(t, success)
+				require.Equal(t, data, message)
+			}
+		}
 	}
-	require.True(t, success)
-	require.Equal(t, data, message)
 }
 
 func TestEncodeDecodeSimplified(t *testing.T) {
-	si := createInfo(3)
-	decs := createDecoders(10, si)
-	data := []byte("gorilla here, gorilla there, I am not going anywhere")
+	simplified := true
+	verbose := false
+	stream := random.New()
+	keyWrapperType := STREAM
 
-	// Simplified
-	blob, err := PURBEncode(data, decs, si, STREAM, random.New(), true, true)
-	if err != nil {
-		panic(err.Error())
+	maxSuites := 10
+	maxRecipients := 10
+
+	if testing.Short() {
+		maxSuites = 3
+		maxRecipients = 3
 	}
-	success, message, err := PURBDecode(blob, &decs[5], STREAM, true, si)
-	fmt.Println(success, message, err)
-	if err != nil {
-		panic(err.Error())
+
+	data := []byte("01234567")
+
+	for nSuites := 1; nSuites < maxSuites; nSuites++ {
+		for nRecipients := 1; nRecipients < maxRecipients; nRecipients++ {
+
+			log.Lvl1("Testing for", nSuites, "suites and", nRecipients, "recipients")
+			suitesInfo := getDummySuiteInfo(nSuites)
+			recipients := createRecipients(nRecipients, suitesInfo)
+
+			// try encode
+			purb, err := PURBEncode(data, recipients, suitesInfo, keyWrapperType, stream, simplified, verbose)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// try parse to bits
+			blob := purb.ToBytes()
+
+			// print for fun
+			//log.Lvl1(purb.visualRepresentation(true))
+
+			// try decode
+			for recipientsID := 0; recipientsID < nRecipients; recipientsID++ {
+				log.Lvl1("Decrypting for recipient", recipientsID)
+				success, message, err := PURBDecode(blob, &recipients[0], keyWrapperType, simplified, suitesInfo, verbose)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				require.True(t, success)
+				require.Equal(t, data, message)
+			}
+		}
 	}
-	require.True(t, success)
-	require.Equal(t, data, message)
 }
 
+func getDummySuiteInfo(N int) SuiteInfoMap {
 
-func createInfo(N int) SuiteInfoMap {
+	// we create N times the same suite
 	info := make(SuiteInfoMap)
 	positions := make([][]int, N+1)
 	suffixes := []string{"", "a", "b", "c", "d", "e", "f", "g", "h", "i"}
+
 	for k := 0; k < N; k++ {
 		limit := int(math.Ceil(math.Log2(float64(N)))) + 1
 		positions[k] = make([]int, limit)
@@ -109,17 +175,16 @@ func createInfo(N int) SuiteInfoMap {
 			positions[k][i] = floor + k%int(math.Pow(2, float64(i)))*CORNERSTONE_LENGTH
 			floor += int(math.Pow(2, float64(i))) * CORNERSTONE_LENGTH
 		}
-		//log.Println(positions[k])
 	}
 	for i := 0; i < N; i++ {
 		info[curve25519.NewBlakeSHA256Curve25519(true).String()+suffixes[i]] = &SuiteInfo{
-			AllowedPositions: positions[i], KeyLen: CORNERSTONE_LENGTH}
+			AllowedPositions: positions[i], CornerstoneLength: CORNERSTONE_LENGTH}
 	}
 
 	return info
 }
 
-func createDecoders(n int, si SuiteInfoMap) []Recipient {
+func createRecipients(n int, si SuiteInfoMap) []Recipient {
 	type suite struct {
 		Name  string
 		Value Suite

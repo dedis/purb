@@ -1,9 +1,9 @@
 package purbs
 
 import (
+	"crypto/cipher"
 	"github.com/dedis/kyber"
 	"github.com/dedis/kyber/util/key"
-	"crypto/cipher"
 )
 
 // Suite defines the required functionalities for each suite from kyber
@@ -15,13 +15,14 @@ type Suite interface {
 	kyber.Random
 }
 
-type SuiteInfoMap map[string]*SuiteInfo // suite info indexed by suite names
+// A map of suite->info, info being the length of a marshalled public key, and the Allowed Positions in the purb header
+type SuiteInfoMap map[string]*SuiteInfo
 
 // SuiteInfo holds possible positions whose cornerstones might take in a header
 // and a PayloadKey length for this suite
 type SuiteInfo struct {
-	AllowedPositions []int // alternative PayloadKey/point position in purb header
-	KeyLen           int   // length of each PayloadKey/point in bytes
+	AllowedPositions  []int // alternative PayloadKey/point position in purb header
+	CornerstoneLength int   // length of each PayloadKey/point in bytes
 }
 
 // Structure to define the whole PURB
@@ -32,17 +33,19 @@ type Purb struct {
 	Payload    []byte // Payload contains already padded plaintext
 	PayloadKey []byte // Payload PayloadKey
 
-	isVerbose  bool // If true, the various operations on the data structure will print what is happening
+	isVerbose bool // If true, the various operations on the data structure will print what is happening
 
-	recipients []Recipient
-	infoMap SuiteInfoMap
-	symmKeyWrapType SYMMETRIC_KEY_WRAPPER_TYPE
-	stream cipher.Stream
+	recipients      []Recipient                // tuple with (Suite, PublicKey, PrivateKey)
+	infoMap         SuiteInfoMap               // public suite information (Allowed Positions, etc)
+	symmKeyWrapType SYMMETRIC_KEY_WRAPPER_TYPE // type of encryption for the Entrypoints (symmetric or AEAD)
+	stream          cipher.Stream              // Used to get randomness
+
+	originalData []byte // Kept to compare between "Payload" and this
 }
 
 // Structure defining the actual header of a purb
 type Header struct {
-	EntryPoints      map[string][]*EntryPoint // List of entrypoints
+	EntryPoints      map[string][]*EntryPoint // map of suiteName -> []entrypoints
 	Cornerstones     map[string]*Cornerstone  // Holds sender's ephemeral private/public keys for each suite in the header
 	Layout           SkipLayout               // An array of byte slices where each of the bytes slice represents a hash table entry
 	Length           int                      //
@@ -54,7 +57,8 @@ type Header struct {
 type Cornerstone struct {
 	SuiteName string
 	KeyPair   *key.Pair
-	Offset    int // Starting byte position in the header
+	Offset    int    // Starting byte position in the header
+	Bytes     []byte // singleton. Since calling marshalling the KeyPair is non-deterministic, at least we do it only once so prints are consistents
 }
 
 //EntryPoint holds the info required to create an entrypoint for each recipient.

@@ -39,6 +39,7 @@ func Pad(msg []byte, other int) []byte {
 	return paddedMsg
 }
 
+// UnPads a padded message
 func UnPad(msg []byte) []byte {
 	stop := bytes.LastIndexByte(msg, STARTPADBYTE)
 	return msg[:stop]
