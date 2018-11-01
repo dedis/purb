@@ -11,3 +11,6 @@ The folder `experiments-encoding` contains simulation about PURBs encoding and d
 
 The folder `experiments-padding` contains an evaluation of Padmé, the padding algorithm for PURBs.
 
+## Example
+
+```
