@@ -13,35 +13,6 @@ import (
 	"strconv"
 )
 
-// Length (in bytes) of the symmetric key used to encrypt the payload
-const SYMMETRIC_KEY_LENGTH = 16
-
-// Length (in bytes) of the pointer to the start of the payload
-const OFFSET_POINTER_LEN = 4
-
-// Length (in bytes) of the Nonce used at the beginning of the PURB
-const AEAD_NONCE_LENGTH = 12
-
-// Length (in bytes) of the MAC tag in the entry point (only used with entrypoints are encrypted with AEAD)
-const MAC_AUTHENTICATION_TAG_LENGTH = SYMMETRIC_KEY_LENGTH
-
-// Length (in bytes) of the Cornerstones (for simplicity assuming all suites HideLen is the same).
-const CORNERSTONE_LENGTH = 32
-
-// Approaches to wrap a symmetric PayloadKey used to encrypt the payload
-type SYMMETRIC_KEY_WRAPPER_TYPE int8
-
-const (
-	// STREAM encrypts the entrypoint with a stream cipher
-	STREAM SYMMETRIC_KEY_WRAPPER_TYPE = iota
-
-	// AEAD encrypt the entrypoint with a AEAD. Not supported yet!
-	AEAD
-)
-
-// Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
-var HASHTABLE_COLLISION_LINEAR_PLACEMENT_ATTEMPTS = 3
-
 // Creates a PURB from some data and recipients information
 func PURBEncode(data []byte, recipients []Recipient, infoMap SuiteInfoMap, keywrap SYMMETRIC_KEY_WRAPPER_TYPE, stream cipher.Stream, simplifiedEntryPointTable bool, verbose bool) (*Purb, error) {
 
@@ -367,7 +338,7 @@ func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
 // and then encrypts using AEAD encryption scheme
 func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) error {
 	var err error
-	paddedData := Pad(data, purb.Header.Length+MAC_AUTHENTICATION_TAG_LENGTH)
+	paddedData := pad(data, purb.Header.Length+MAC_AUTHENTICATION_TAG_LENGTH)
 
 	if purb.isVerbose {
 		log.LLvlf3("Payload padded from %v to %v bytes", len(data), len(paddedData))

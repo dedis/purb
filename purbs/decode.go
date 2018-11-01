@@ -210,7 +210,7 @@ func verifyDecryption(entrypoint []byte, fullPURBBlob []byte) (bool, string, []b
 	}
 
 	if len(msg) != 0 {
-		msg = UnPad(msg)
+		msg = unPad(msg)
 	}
 
 	return true, "", msg
