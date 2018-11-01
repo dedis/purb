@@ -27,7 +27,7 @@ func main() {
 	fmt.Println(hex.Dump(blob))
 	fmt.Println()
 
-	// Decode
+	// PURBDecode
 	_, dec, _ := purbs.Decode(blob, &decs[0], purbs.STREAM, false, si)
 
 	fmt.Println(hex.Dump(dec))

@@ -8,8 +8,6 @@ import (
 	"os"
 	"strings"
 
-	//"github.com/nikirill/purbs/purb"
-
 	"github.com/dedis/kyber/group/curve25519"
 	"github.com/dedis/kyber/util/key"
 	"github.com/dedis/kyber/util/random"
