@@ -56,7 +56,7 @@ func TestPurbCreation(t *testing.T) {
 		t.Error(err)
 	}
 
-	log.Lvl1(purb.visualRepresentation(true))
+	log.Lvl1(purb.VisualRepresentation(true))
 }
 
 func TestEncodeDecode(t *testing.T) {

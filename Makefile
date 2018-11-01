@@ -1,4 +1,4 @@
-.PHONY: install example test simul padme-figures
+.PHONY: install example demo test simul padme-figures
 
 install:
 	go get -u -tags=vartime ./...
@@ -6,8 +6,10 @@ install:
 example:
 	go run -tags=vartime example.go
 
+demo: example
+
 test:
-	$(MAKE) -C purb test
+	$(MAKE) -C purbs test
 	$(MAKE) -C experiments-encoding test
 
 simul:

@@ -10,13 +10,13 @@ import (
 	"syscall"
 )
 
-func (purb *Purb) visualRepresentation(withBoundaries bool) string {
+func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 
 	lines := make([]string, 0)
 
 	verbose := purb.isVerbose
-	purb.isVerbose = true
-	bytes := purb.ToBytes()
+	purb.isVerbose = false
+	bytes := purb.ToBytes() // we don't want this to be verbose
 	purb.isVerbose = verbose
 
 	lines = append(lines, "*** PURB Details ***")

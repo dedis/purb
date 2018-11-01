@@ -10,44 +10,63 @@ import (
 )
 
 func main() {
+	// this is public and fixed across all purbs
+	suitesInfo := getDummySuiteInfo()
 
-	msg := []byte("And presently I was driving through the drizzle of the dying day, with the windshield wipers in full action but unable to cope with my tears.")
+	msg := "And presently I was driving through the drizzle of the dying day, with the windshield wipers in full action but unable to cope with my tears."
 
-	fmt.Println(hex.Dump(msg))
+	fmt.Printf("Message: %v\n", msg)
+	fmt.Println(hex.Dump([]byte(msg)))
 	fmt.Println()
 
-	// Encode
-	si := createInfo()
-	decs := createDecoders(1)
-	blob, err := purbs.MakePurb(msg, decs, si, purbs.STREAM, false, random.New())
+	simplified := false // when "true", does not use hash tables (but linear mapping)
+	stream := random.New()
+	verbose := false
+	symmetricKeyWrapperType := purbs.STREAM
+
+	// Encode (this sets-up many things, but does not output []bytes)
+	recipients := createRecipients(1)
+	purb, err := purbs.PURBEncode([]byte(msg), recipients, suitesInfo, symmetricKeyWrapperType, stream, simplified, verbose)
 	if err != nil {
 		panic(err.Error())
 	}
 
+	// Actually map to []bytes
+	blob := purb.ToBytes()
+
+	fmt.Println("PURB created:")
 	fmt.Println(hex.Dump(blob))
 	fmt.Println()
 
-	// PURBDecode
-	_, dec, _ := purbs.Decode(blob, &decs[0], purbs.STREAM, false, si)
+	fmt.Println("PURB's internal structure:")
+	fmt.Println(purb.VisualRepresentation(false))
+	fmt.Println()
 
-	fmt.Println(hex.Dump(dec))
+	// PURBDecode
+	success, decrypted, error := purbs.PURBDecode(blob, &recipients[0], symmetricKeyWrapperType, simplified, suitesInfo, verbose)
+
+	fmt.Println("Success:", success)
+	fmt.Println("Error message:", error)
+	fmt.Println(string(decrypted))
+	fmt.Println(hex.Dump(decrypted))
 }
 
-func createInfo() purbs.SuiteInfoMap {
+func getDummySuiteInfo() purbs.SuiteInfoMap {
 	info := make(purbs.SuiteInfoMap)
+	cornerstoneLength := purbs.CORNERSTONE_LENGTH
 	info[curve25519.NewBlakeSHA256Curve25519(true).String()] = &purbs.SuiteInfo{
-		Positions: []int{12 + 0*purbs.KEYLEN, 12 + 1*purbs.KEYLEN, 12 + 3*purbs.KEYLEN, 12 + 4*purbs.KEYLEN},
-		KeyLen:    purbs.KEYLEN}
+		AllowedPositions: []int{12 + 0*cornerstoneLength, 12 + 1*cornerstoneLength, 12 + 3*cornerstoneLength, 12 + 4*cornerstoneLength},
+		CornerstoneLength: cornerstoneLength}
 	return info
 }
 
-func createDecoders(n int) []purbs.Decoder {
-	decs := make([]purbs.Decoder, 0)
+func createRecipients(n int) []purbs.Recipient {
+	decs := make([]purbs.Recipient, 0)
 	suites := []purbs.Suite{curve25519.NewBlakeSHA256Curve25519(true)}
 	for _, suite := range suites {
 		for i := 0; i < n; i++ {
 			pair := key.NewKeyPair(suite)
-			decs = append(decs, purbs.Decoder{SuiteName: suite.String(), Suite: suite, PublicKey: pair.Public, PrivateKey: pair.Private})
+			decs = append(decs, purbs.Recipient{SuiteName: suite.String(), Suite: suite, PublicKey: pair.Public, PrivateKey: pair.Private})
 		}
 	}
 	return decs
