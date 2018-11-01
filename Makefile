@@ -18,4 +18,8 @@ simul:
 padme-figures:
 	$(MAKE) -C experiments-padding all
 
+
+lint:
+	$(MAKE) -C purbs lint
+
 all: install test example
