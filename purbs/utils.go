@@ -10,6 +10,7 @@ import (
 	"syscall"
 )
 
+// Simply returns a string with the internal details of the PURB
 func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 
 	lines := make([]string, 0)
