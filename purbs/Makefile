@@ -1,7 +1,7 @@
 .PHONY: install test testlong lint
 
 install:
-	go get -u -tags=vartime ./...
+	go get -u -tags=vartime -v ./...
 
 test:
 	DEBUG_COLOR=true DEBUG_LEVEL=3 go test -v -race -test.short -tags=vartime *.go
