@@ -11,8 +11,8 @@ import (
 	"github.com/dedis/kyber/group/curve25519"
 	"github.com/dedis/kyber/util/key"
 	"github.com/dedis/kyber/util/random"
-	"github.com/dedis/paper_purbs/experiments-encoding/pgp"
-	"github.com/dedis/paper_purbs/purbs"
+	"github.com/dedis/purbs/experiments-encoding/pgp"
+	"github.com/dedis/purbs/purbs"
 )
 
 const VERBOSE = false
