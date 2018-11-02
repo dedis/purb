@@ -16,9 +16,9 @@ import (
 // Creates a struct with parameters that are *fixed* across all PURBs. Should be constants, but here it is a variable for simulating various parameters
 func NewPublicFixedParameters(infoMap SuiteInfoMap, keywrap ENTRYPOINT_ENCRYPTION_TYPE, simplifiedEntryPointTable bool) *PurbPublicFixedParameters {
 	return &PurbPublicFixedParameters{
-		SuiteInfoMap:                   infoMap,
-		EntrypointEncryptionType:       keywrap,
-		SimplifiedEntrypointsPlacement: simplifiedEntryPointTable,
+		SuiteInfoMap:                               infoMap,
+		EntrypointEncryptionType:                   keywrap,
+		SimplifiedEntrypointsPlacement:             simplifiedEntryPointTable,
 		HashTableCollisionLinearResolutionAttempts: 3,
 	}
 }
