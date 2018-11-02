@@ -28,7 +28,7 @@ func main() {
 
 	// Encode (this sets-up many things, but does not output []bytes)
 	recipients := createRecipients(1)
-	purb, err := purbs.PURBEncode([]byte(msg), recipients, stream, publicFixedParams, verbose)
+	purb, err := purbs.Encode([]byte(msg), recipients, stream, publicFixedParams, verbose)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -44,8 +44,8 @@ func main() {
 	fmt.Println(purb.VisualRepresentation(false))
 	fmt.Println()
 
-	// PURBDecode
-	success, decrypted, error := purbs.PURBDecode(blob, &recipients[0], symmetricKeyWrapperType, simplified, suitesInfo, verbose)
+	// Decode
+	success, decrypted, error := purbs.Decode(blob, &recipients[0], publicFixedParams, verbose)
 
 	fmt.Println("Success:", success)
 	fmt.Println("Error message:", error)

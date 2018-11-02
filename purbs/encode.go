@@ -13,16 +13,17 @@ import (
 	"strconv"
 )
 
+// Creates a struct with parameters that are *fixed* across all PURBs. Should be constants, but here it is a variable for simulating various parameters
 func NewPublicFixedParameters(infoMap SuiteInfoMap, keywrap SYMMETRIC_KEY_WRAPPER_TYPE, simplifiedEntryPointTable bool) *PurbPublicFixedParameters {
 	return &PurbPublicFixedParameters{
-		SuiteInfoMap: infoMap,
-		EntrypointEncryptionType: keywrap,
+		SuiteInfoMap:                   infoMap,
+		EntrypointEncryptionType:       keywrap,
 		SimplifiedEntrypointsPlacement: simplifiedEntryPointTable,
 	}
 }
 
 // Creates a PURB from some data and Recipients information
-func PURBEncode(data []byte, recipients []Recipient, stream cipher.Stream, params *PurbPublicFixedParameters, verbose bool) (*Purb, error) {
+func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *PurbPublicFixedParameters, verbose bool) (*Purb, error) {
 
 	// generate payload PayloadKey and global nonce. It could be passed by an application above
 	key := make([]byte, SYMMETRIC_KEY_LENGTH)
@@ -40,15 +41,15 @@ func PURBEncode(data []byte, recipients []Recipient, stream cipher.Stream, param
 
 	// create the PURB datastructure
 	purb := &Purb{
-		Nonce:                          nonce,
-		Header:                         nil,
-		Payload:                        nil,
-		PayloadKey:                     key,
-		Recipients:                     recipients,
-		Stream:       stream,
-		OriginalData: data, // just for statistics
+		Nonce:            nonce,
+		Header:           nil,
+		Payload:          nil,
+		PayloadKey:       key,
+		Recipients:       recipients,
+		Stream:           stream,
+		OriginalData:     data, // just for statistics
 		PublicParameters: params,
-		IsVerbose: verbose,
+		IsVerbose:        verbose,
 	}
 
 	if purb.IsVerbose {

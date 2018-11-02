@@ -58,22 +58,22 @@ type SuiteInfo struct {
 type Purb struct {
 	PublicParameters *PurbPublicFixedParameters
 
-	Nonce []byte // Nonce used in both AEAD of entrypoints and payload. The same for different entrypoints as the keys are different. It is stored in the very beginning of the purb
+	Nonce      []byte // Nonce used in both AEAD of entrypoints and payload. The same for different entrypoints as the keys are different. It is stored in the very beginning of the purb
 	Header     *Header
-	Payload    []byte // Payload contains already padded plaintext
-	PayloadKey []byte // Payload PayloadKey
-	Recipients               []Recipient                // tuple with (Suite, PublicKey, PrivateKey)
-	Stream                   cipher.Stream              // Used to get randomness
+	Payload    []byte        // Payload contains already padded plaintext
+	PayloadKey []byte        // Payload PayloadKey
+	Recipients []Recipient   // tuple with (Suite, PublicKey, PrivateKey)
+	Stream     cipher.Stream // Used to get randomness
 
 	OriginalData []byte // Kept to compare between "Payload" and this
-	IsVerbose                      bool // If true, the various operations on the data structure will print what is happening
+	IsVerbose    bool   // If true, the various operations on the data structure will print what is happening
 }
 
 // This struct's contents are *not* parameters to the PURBs. Here they vary for the simulations and the plots, but they should be fixed for all purbs
 type PurbPublicFixedParameters struct {
-	SuiteInfoMap             SuiteInfoMap               // public suite information (Allowed Positions, etc)
-	EntrypointEncryptionType SYMMETRIC_KEY_WRAPPER_TYPE // type of encryption for the Entrypoints (symmetric or AEAD)
-	SimplifiedEntrypointsPlacement bool // If true, does not use hash tables for entrypoints
+	SuiteInfoMap                   SuiteInfoMap               // public suite information (Allowed Positions, etc)
+	EntrypointEncryptionType       SYMMETRIC_KEY_WRAPPER_TYPE // type of encryption for the Entrypoints (symmetric or AEAD)
+	SimplifiedEntrypointsPlacement bool                       // If true, does not use hash tables for entrypoints
 }
 
 // Structure defining the actual header of a purb

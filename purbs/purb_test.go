@@ -18,9 +18,9 @@ func TestGenCornerstones(t *testing.T) {
 		Payload:    nil,
 		PayloadKey: nil,
 
-		IsVerbose:                true,
-		Recipients:               nil,
-		Stream: random.New(),
+		IsVerbose:        true,
+		Recipients:       nil,
+		Stream:           random.New(),
 		PublicParameters: publicFixedParams,
 	}
 
@@ -50,7 +50,7 @@ func TestPurbCreation(t *testing.T) {
 	recipients := createRecipients(1, infoMap)
 
 	publicFixedParams := NewPublicFixedParameters(infoMap, STREAM, false)
-	purb, err := PURBEncode(data, recipients, random.New(), publicFixedParams, true)
+	purb, err := Encode(data, recipients, random.New(), publicFixedParams, true)
 
 	if err != nil {
 		t.Error(err)
@@ -81,12 +81,12 @@ func TestEncodeDecode(t *testing.T) {
 
 			log.Lvl1("Testing for", nSuites, "suites and", nRecipients, "Recipients")
 			suitesInfo := getDummySuiteInfo(nSuites)
+			publicFixedParams := NewPublicFixedParameters(suitesInfo, keyWrapperType, simplified)
+
 			recipients := createRecipients(nRecipients, suitesInfo)
 
-			publicFixedParams := NewPublicFixedParameters(suitesInfo, STREAM, false)
-
 			// try encode
-			purb, err := PURBEncode(data, recipients, stream, publicFixedParams, verbose)
+			purb, err := Encode(data, recipients, stream, publicFixedParams, verbose)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -100,7 +100,7 @@ func TestEncodeDecode(t *testing.T) {
 			// try decode
 			for recipientsID := 0; recipientsID < nRecipients; recipientsID++ {
 				log.Lvl1("Decrypting for recipient", recipientsID)
-				success, message, err := PURBDecode(blob, &recipients[0], keyWrapperType, simplified, suitesInfo, verbose)
+				success, message, err := Decode(blob, &recipients[0], publicFixedParams, verbose)
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -133,12 +133,12 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 
 			log.Lvl1("Testing for", nSuites, "suites and", nRecipients, "Recipients")
 			suitesInfo := getDummySuiteInfo(nSuites)
+			publicFixedParams := NewPublicFixedParameters(suitesInfo, keyWrapperType, simplified)
+
 			recipients := createRecipients(nRecipients, suitesInfo)
 
-			publicFixedParams := NewPublicFixedParameters(suitesInfo, STREAM, false)
-
 			// try encode
-			purb, err := PURBEncode(data, recipients, stream, publicFixedParams, verbose)
+			purb, err := Encode(data, recipients, stream, publicFixedParams, verbose)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -152,7 +152,7 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 			// try decode
 			for recipientsID := 0; recipientsID < nRecipients; recipientsID++ {
 				log.Lvl1("Decrypting for recipient", recipientsID)
-				success, message, err := PURBDecode(blob, &recipients[0], keyWrapperType, simplified, suitesInfo, verbose)
+				success, message, err := Decode(blob, &recipients[0], publicFixedParams, verbose)
 				if err != nil {
 					log.Fatal(err)
 				}

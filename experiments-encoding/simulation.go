@@ -97,13 +97,13 @@ func MeasureNumRecipients() {
 
 			// ----------- PURBs simplified ---------------
 			publicFixedParams := purbs.NewPublicFixedParameters(si, ENTRYPOINT_TYPE, true)
-			purb, err := purbs.PURBEncode(msg, decs, random.New(), publicFixedParams, VERBOSE)
+			purb, err := purbs.Encode(msg, decs, random.New(), publicFixedParams, VERBOSE)
 			blob := purb.ToBytes()
 			if err != nil {
 				panic(err.Error())
 			}
 			m.reset()
-			success, out, err := purbs.PURBDecode(blob, &decs[0], ENTRYPOINT_TYPE, true, si, VERBOSE)
+			success, out, err := purbs.Decode(blob, &decs[0], publicFixedParams, VERBOSE)
 			tPURBs = append(tPURBs, m.record())
 
 			if !success || !bytes.Equal(out, msg) {
@@ -115,13 +115,13 @@ func MeasureNumRecipients() {
 
 			// ----------------- PURBs --------------------
 			publicFixedParams = purbs.NewPublicFixedParameters(si, ENTRYPOINT_TYPE, false)
-			purb, err = purbs.PURBEncode(msg, decs, random.New(), publicFixedParams, VERBOSE)
+			purb, err = purbs.Encode(msg, decs, random.New(), publicFixedParams, VERBOSE)
 			blob = purb.ToBytes()
 			if err != nil {
 				panic(err.Error())
 			}
 			m.reset()
-			success, out, err = purbs.PURBDecode(blob, &decs[0], ENTRYPOINT_TYPE, SIMPLIFIED_PURB, si, VERBOSE)
+			success, out, err = purbs.Decode(blob, &decs[0], publicFixedParams, VERBOSE)
 			tPURBhash = append(tPURBhash, m.record())
 
 			if !success || !bytes.Equal(out, msg) {
@@ -238,7 +238,7 @@ func MeasureEncryptionTime() {
 			decs := createMultiDecoders(N, si)
 			m := newMonitor()
 			for i := 0; i < 21; i++ {
-				_, err := purbs.PURBEncode(msg, decs, random.New(), publicFixedParams, VERBOSE)
+				_, err := purbs.Encode(msg, decs, random.New(), publicFixedParams, VERBOSE)
 				fmt.Printf("%f\n", m.recordAndReset())
 				if err != nil {
 					panic(err.Error())
@@ -254,12 +254,12 @@ func DecodeOne() {
 	si := createInfo()
 	publicFixedParams := purbs.NewPublicFixedParameters(si, ENTRYPOINT_TYPE, SIMPLIFIED_PURB)
 	decs := createDecoders(1)
-	purb, err := purbs.PURBEncode(msg, decs, random.New(), publicFixedParams, VERBOSE)
+	purb, err := purbs.Encode(msg, decs, random.New(), publicFixedParams, VERBOSE)
 	if err != nil {
 		panic(err.Error())
 	}
 	blob := purb.ToBytes()
-	purbs.PURBDecode(blob, &decs[0], ENTRYPOINT_TYPE, SIMPLIFIED_PURB, si, VERBOSE)
+	purbs.Decode(blob, &decs[0], publicFixedParams, VERBOSE)
 
 	//PGP
 	//sender := NewPGP()

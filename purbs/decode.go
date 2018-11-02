@@ -11,10 +11,10 @@ import (
 	"github.com/dedis/onet/log"
 )
 
-// PURBDecode takes a PURB blob and a recipient info (suite+KeyPair) and extracts the payload
-func PURBDecode(data []byte, recipient *Recipient, symmKeyWrapType SYMMETRIC_KEY_WRAPPER_TYPE, simplifiedEntryPointTable bool, infoMap SuiteInfoMap, verbose bool) (bool, []byte, error) {
+// Decode takes a PURB blob and a recipient info (suite+KeyPair) and extracts the payload
+func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublicFixedParameters, verbose bool) (bool, []byte, error) {
 	suiteName := recipient.SuiteName
-	suiteInfo := infoMap[suiteName]
+	suiteInfo := publicFixedParameters.SuiteInfoMap[suiteName]
 
 	if verbose {
 		log.LLvlf3("Attempting to decode using suite %v, len %v, positions %v", suiteName, suiteInfo.CornerstoneLength, suiteInfo.AllowedPositions)
@@ -67,10 +67,10 @@ func PURBDecode(data []byte, recipient *Recipient, symmKeyWrapType SYMMETRIC_KEY
 	}
 
 	// Now we try to decrypt iteratively the entrypoints and check if the decrypted PayloadKey works for AEAD of payload
-	if !simplifiedEntryPointTable {
-		return entrypointTrialDecode(data, recipient, sharedSecret, suiteInfo, symmKeyWrapType, verbose)
+	if !publicFixedParameters.SimplifiedEntrypointsPlacement {
+		return entrypointTrialDecode(data, recipient, sharedSecret, suiteInfo, publicFixedParameters.EntrypointEncryptionType, verbose)
 	}
-	return entrypointTrialDecodeSimplified(data, recipient, sharedSecret, suiteInfo, symmKeyWrapType, verbose)
+	return entrypointTrialDecodeSimplified(data, recipient, sharedSecret, suiteInfo, publicFixedParameters.EntrypointEncryptionType, verbose)
 }
 
 func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, symmKeyWrapType SYMMETRIC_KEY_WRAPPER_TYPE, verbose bool) (bool, []byte, error) {
