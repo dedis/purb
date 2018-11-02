@@ -20,7 +20,7 @@ const STARTPADBYTE = 0x80
 // Pads a message according the defined scheme.
 // 'other' is a number of additional bytes in purb (header, nonce, mac)
 // that need to be taken into account when computing the amount of padding.
-func Pad(msg []byte, other int) []byte {
+func pad(msg []byte, other int) []byte {
 	var paddedMsg []byte
 	// STARTPADBYTE must be always present so we append it first and then compute
 	// amount of zero padding needed
@@ -39,7 +39,8 @@ func Pad(msg []byte, other int) []byte {
 	return paddedMsg
 }
 
-func UnPad(msg []byte) []byte {
+// UnPads a padded message
+func unPad(msg []byte) []byte {
 	stop := bytes.LastIndexByte(msg, STARTPADBYTE)
 	return msg[:stop]
 }

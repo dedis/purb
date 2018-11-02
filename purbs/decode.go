@@ -6,118 +6,191 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
-	"log"
 
 	"github.com/dedis/kyber"
+	"github.com/dedis/onet/log"
 )
 
-func Decode(blob []byte, dec *Decoder, keywrap int, simplified bool, infoMap SuiteInfoMap) (bool, []byte, error) {
-	suiteName := dec.SuiteName
-	info := infoMap[suiteName]
-	if info == nil {
-		return false, nil, errors.New("no positions info for this suite")
+// Decode takes a PURB blob and a recipient info (suite+KeyPair) and extracts the payload
+func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublicFixedParameters, verbose bool) (bool, []byte, error) {
+	suiteName := recipient.SuiteName
+	suiteInfo := publicFixedParameters.SuiteInfoMap[suiteName]
+
+	if verbose {
+		log.LLvlf3("Attempting to decode using suite %v, len %v, positions %v", suiteName, suiteInfo.CornerstoneLength, suiteInfo.AllowedPositions)
 	}
-	var ENTRYLEN int
-	switch keywrap {
-	case STREAM:
-		ENTRYLEN = SYMKEYLEN + OFFSET_POINTER_LEN
-	case AEAD:
-		ENTRYLEN = SYMKEYLEN + OFFSET_POINTER_LEN + MAC_LEN
+
+	if suiteInfo == nil {
+		return false, nil, errors.New("no positions suiteInfo for this suite")
 	}
+
 	// XOR all the possible suite positions to computer the cornerstone value
-	cornerstone := make([]byte, info.KeyLen)
-	for _, offset := range info.Positions {
-		stop := offset + info.KeyLen
-		if offset > len(blob) {
-			if offset > len(blob) {
+	cornerstone := make([]byte, suiteInfo.CornerstoneLength)
+	for _, startPos := range suiteInfo.AllowedPositions {
+		endPos := startPos + suiteInfo.CornerstoneLength
+		if startPos > len(data) {
+			if startPos > len(data) {
 				break
 			} else {
-				stop = len(blob)
+				endPos = len(data)
 			}
 		}
-		temp := blob[offset:stop]
-		for j := range temp {
-			cornerstone[j] ^= temp[j]
+		cornerstoneBytes := data[startPos:endPos]
+
+		if verbose {
+			log.LLvlf3("XORing in the bytes [%v:%v], value %v", startPos, endPos, cornerstoneBytes)
+		}
+
+		for j := range cornerstoneBytes {
+			cornerstone[j] ^= cornerstoneBytes[j]
 		}
 	}
-	//log.Printf("Found the key %x", cornerstone)
 
-	//Now that we have the key for our suite calculate the shared key
-	pub := dec.Suite.Point()
-	pub.(kyber.Hiding).HideDecode(cornerstone)
-	//m := NewMonitor()
-	//sharedSecret, err := dec.Suite.Point().Mul(pub, dec.PrivateKey).MarshalBinary()
-	sharedBytes, err := dec.Suite.Point().Mul(dec.PrivateKey, pub).MarshalBinary()
-	sharedSecret := KDF(sharedBytes)
-	//log.Println("Multiplication PURBS: ", m.Record())
+	if verbose {
+		log.LLvlf3("Recovered cornerstone has value %v, len %v", cornerstone, len(cornerstone))
+	}
+
+	//Now that we have the PayloadKey for our suite, calculate the shared PayloadKey
+	pubKey := recipient.Suite.Point()
+	pubKey.(kyber.Hiding).HideDecode(cornerstone)
+
+	sharedKey := recipient.Suite.Point().Mul(recipient.PrivateKey, pubKey)
+	sharedBytes, err := sharedKey.MarshalBinary()
 	if err != nil {
 		return false, nil, err
 	}
+	sharedSecret := KDF(sharedBytes)
 
-	// Now we try to decrypt all possible entries and check if the decrypted key works for AEAD of payload
-	var message []byte
-	start := info.Positions[0] + info.KeyLen
-	found := false
-	if !simplified {
-		tableSize := 1
-		hash := sha256.New()
-		hash.Write(sharedSecret)
-		absPos := int(binary.BigEndian.Uint32(hash.Sum(nil))) // Large number to become a position
-		var tHash int
-		for start+(tHash+1)*ENTRYLEN < len(blob) {
-			for j := 0; j < PLACEMENT_ATTEMPTS; j++ {
-				tHash = (absPos + j) % tableSize
-				if start+(tHash+1)*ENTRYLEN > len(blob) {
-					break
+	if verbose {
+		log.LLvlf3("Recovered sharedbytes value %v, len %v", sharedBytes, len(sharedBytes))
+		log.LLvlf3("Recovered sharedsecret value %v, len %v", sharedSecret, len(sharedSecret))
+	}
+
+	// Now we try to decrypt iteratively the entrypoints and check if the decrypted PayloadKey works for AEAD of payload
+	if !publicFixedParameters.SimplifiedEntrypointsPlacement {
+		return entrypointTrialDecode(data, recipient, sharedSecret, suiteInfo, publicFixedParameters.EntrypointEncryptionType, publicFixedParameters.HashTableCollisionLinearResolutionAttempts, verbose)
+	}
+	return entrypointTrialDecodeSimplified(data, recipient, sharedSecret, suiteInfo, publicFixedParameters.EntrypointEncryptionType, verbose)
+}
+
+func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, symmKeyWrapType ENTRYPOINT_ENCRYPTION_TYPE, hashTableLinearResolutionCollisionAttempt int, verbose bool) (bool, []byte, error) {
+
+	var entrypointLength int
+	switch symmKeyWrapType {
+	case STREAM:
+		entrypointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
+	case AEAD:
+		entrypointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN + MAC_AUTHENTICATION_TAG_LENGTH
+	}
+
+	hash := sha256.New()
+	hash.Write(sharedSecret)
+	intOfHashedValue := int(binary.BigEndian.Uint32(hash.Sum(nil))) // Large number to become a position
+
+	tableSize := 1
+	hashTableStartPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
+
+	for {
+		var entrypointIndexInHashTable int
+
+		// try each position, and up to HASHTABLE_COLLISION_LINEAR_PLACEMENT_ATTEMPTS later
+		for j := 0; j < hashTableLinearResolutionCollisionAttempt; j++ {
+			entrypointIndexInHashTable = (intOfHashedValue + j) % tableSize
+
+			entrypointStartPos := hashTableStartPos + entrypointIndexInHashTable*entrypointLength
+			entrypointEndPos := hashTableStartPos + (entrypointIndexInHashTable+1)*entrypointLength
+
+			if entrypointEndPos > len(data) {
+				// we're outside the hash table (even outside the blob!), so this j isn't valid
+				break
+			}
+
+			switch symmKeyWrapType {
+			case STREAM:
+				xof := recipient.Suite.XOF(sharedSecret)
+
+				decrypted := make([]byte, entrypointLength)
+				xof.XORKeyStream(decrypted, data[entrypointStartPos:entrypointEndPos])
+
+				if verbose {
+					log.LLvlf3("Recovering potential entrypoint [%v:%v], value %v", entrypointStartPos, entrypointEndPos, data[entrypointStartPos:entrypointEndPos])
+					log.LLvlf3("  Attempting decryption with sharedSecret %v", sharedSecret)
+					log.LLvlf3("  yield %v", decrypted)
 				}
-				m := NewMonitor()
-				switch keywrap {
-				case STREAM:
-					xof := dec.Suite.XOF(sharedSecret)
-					decrypted := make([]byte, ENTRYLEN)
-					xof.XORKeyStream(decrypted, blob[start+tHash*ENTRYLEN:start+(tHash+1)*ENTRYLEN])
-					found, message = verifyDecryption(decrypted, blob)
-				case AEAD:
-				case AES:
+
+				found, errorReason, message := verifyDecryption(decrypted, data)
+
+				if verbose {
+					log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
 				}
-				log.Println("Entry point decryption: ", m.Record())
 
 				if found {
 					return found, message, nil
 				}
-			}
-			start += tableSize * ENTRYLEN
-			tableSize *= 2
-		}
-	} else {
-		for start+ENTRYLEN < len(blob) {
-			switch keywrap {
-			case STREAM:
-				xof := dec.Suite.XOF(sharedSecret)
-				decrypted := make([]byte, ENTRYLEN)
-				xof.XORKeyStream(decrypted, blob[start:start+ENTRYLEN])
-				found, message = verifyDecryption(decrypted, blob)
 			case AEAD:
-			case AES:
+				panic("not implemented")
+			}
+		}
+
+		hashTableStartPos += tableSize * entrypointLength
+		entrypointEndPos := hashTableStartPos + entrypointIndexInHashTable*entrypointLength + entrypointLength
+		tableSize *= 2
+
+		if entrypointEndPos > len(data) {
+			// we're outside the hash table (even outside the blob!), so we should have decoded the entrypoint before
+			return false, nil, errors.New("no entrypoint was correctly decrypted")
+		}
+	}
+
+	return false, nil, errors.New("no entrypoint was correctly decrypted")
+}
+
+func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, symmKeyWrapType ENTRYPOINT_ENCRYPTION_TYPE, verbose bool) (bool, []byte, error) {
+	startPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
+
+	var entrypointLength int
+	switch symmKeyWrapType {
+	case STREAM:
+		entrypointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
+	case AEAD:
+		entrypointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN + MAC_AUTHENTICATION_TAG_LENGTH
+	}
+
+	for startPos+entrypointLength < len(data) {
+		switch symmKeyWrapType {
+		case STREAM:
+			xof := recipient.Suite.XOF(sharedSecret)
+			decrypted := make([]byte, entrypointLength)
+			xof.XORKeyStream(decrypted, data[startPos:startPos+entrypointLength])
+			found, errorReason, message := verifyDecryption(decrypted, data)
+
+			if verbose {
+				log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
 			}
 			if found {
 				return found, message, nil
 			}
-			start += ENTRYLEN
+		case AEAD:
+			panic("not implemented")
 		}
+		startPos += entrypointLength
 	}
 
-	return false, nil, nil
+	return false, nil, errors.New("no entrypoint was correctly decrypted")
 }
 
-func verifyDecryption(decrypted []byte, blob []byte) (bool, []byte) {
-	var result bool
-	msgStart := int(binary.BigEndian.Uint32(decrypted[SYMKEYLEN : SYMKEYLEN+OFFSET_POINTER_LEN]))
-	if msgStart > len(blob) {
-		return false, nil
+func verifyDecryption(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {
+
+	// verify pointer to payload
+	msgStartBytes := entrypoint[SYMMETRIC_KEY_LENGTH : SYMMETRIC_KEY_LENGTH+OFFSET_POINTER_LEN]
+	msgStart := int(binary.BigEndian.Uint32(msgStartBytes))
+	if msgStart > len(fullPURBBlob) {
+		// the pointer is pointing outside the blob
+		return false, "entrypoint pointer is invalid", nil
 	}
-	//log.Println("Start of the message ", msgStart)
-	key := decrypted[:SYMKEYLEN]
+
+	// compute PayloadKey from entrypoint, create the decoder
+	key := entrypoint[:SYMMETRIC_KEY_LENGTH]
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		log.Fatal(err.Error())
@@ -126,14 +199,19 @@ func verifyDecryption(decrypted []byte, blob []byte) (bool, []byte) {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	msg, err := aesgcm.Open(nil, blob[:NONCE_LEN], blob[msgStart:], nil)
-	if err == nil {
-		result = true
+
+	// try decoding the payload
+	payload := fullPURBBlob[msgStart:]
+	aeadNonce := fullPURBBlob[:AEAD_NONCE_LENGTH]
+
+	msg, err := aesgcm.Open(nil, aeadNonce, payload, nil)
+	if err != nil {
+		return false, "aead opening error", nil
 	}
+
 	if len(msg) != 0 {
-		msg = UnPad(msg)
-		return result, msg
-	} else {
-		return result, nil
+		msg = unPad(msg)
 	}
+
+	return true, "", msg
 }

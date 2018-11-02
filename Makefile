@@ -1,20 +1,26 @@
-.PHONY: install
-install:
-	go get -u -v ./...
+.PHONY: install example demo test simul padme-figures
 
-.PHONY: example
+install:
+	go get -u -tags=vartime -v ./...
+	$(MAKE) -C purbs install
+	$(MAKE) -C experiments-encoding install
+
 example:
 	go run -tags=vartime example.go
 
-.PHONY:test
+demo: example
+
 test:
-	cd purbs && go test -v -race -tags=vartime *
-	cd experiments-encoding/pgp && go test -v -race *
+	$(MAKE) -C purbs test
+	$(MAKE) -C experiments-encoding test
 
-.PHONY: simul
 simul:
-	cd experiments-encoding && go run -tags=vartime simulation.go
+	$(MAKE) -C experiments-encoding simul
 
-.PHONY: padme-figures
 padme-figures:
 	$(MAKE) -C experiments-padding all
+
+lint:
+	$(MAKE) -C purbs lint
+
+all: install test example

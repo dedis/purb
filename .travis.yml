@@ -1,0 +1,9 @@
+language: go
+
+install:
+- go get github.com/stretchr/testify/require
+- make install
+
+script:
+- make test
+- make lint
