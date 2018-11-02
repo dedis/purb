@@ -13,8 +13,8 @@ The folder `experiments-padding` contains an evaluation of Padmé, the padding a
 
 ## Example
 
-```
 Message: And presently I was driving through the drizzle of the dying day, with the windshield wipers in full action but unable to cope with my tears.
+```
 00000000  41 6e 64 20 70 72 65 73  65 6e 74 6c 79 20 49 20  |And presently I |
 00000010  77 61 73 20 64 72 69 76  69 6e 67 20 74 68 72 6f  |was driving thro|
 00000020  75 67 68 20 74 68 65 20  64 72 69 7a 7a 6c 65 20  |ugh the drizzle |
@@ -26,7 +26,7 @@ Message: And presently I was driving through the drizzle of the dying day, with 
 00000080  69 74 68 20 6d 79 20 74  65 61 72 73 2e           |ith my tears.|
 ```
 
-PURB created:
+PURB for 1 recipient, 1 suite (Curve 25519):
 ```
 00000000  d7 6f be d6 fd 26 30 c1  24 76 80 a2 a8 34 db c9  |.o...&0.$v...4..|
 00000010  48 22 3e 0d f6 cd 29 99  58 39 34 e6 3d 0e 04 55  |H">...).X94.=..U|
