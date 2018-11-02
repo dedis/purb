@@ -25,13 +25,13 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 	lines = append(lines, fmt.Sprintf("Nonce: %+v (len %v)", purb.Nonce, len(purb.Nonce)))
 
 	for _, cornerstone := range purb.Header.Cornerstones {
-		lines = append(lines, fmt.Sprintf("Cornerstones: %+v @ offset %v (len %v)", cornerstone.SuiteName, cornerstone.Offset, purb.SuiteInfoMap[cornerstone.SuiteName].CornerstoneLength))
+		lines = append(lines, fmt.Sprintf("Cornerstones: %+v @ offset %v (len %v)", cornerstone.SuiteName, cornerstone.Offset, purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].CornerstoneLength))
 
 		lines = append(lines, fmt.Sprintf("  Value: %v", cornerstone.Bytes))
-		lines = append(lines, fmt.Sprintf("  Allowed positions for this suite: %v", purb.SuiteInfoMap[cornerstone.SuiteName].AllowedPositions))
+		lines = append(lines, fmt.Sprintf("  Allowed positions for this suite: %v", purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].AllowedPositions))
 
 		cornerstoneStartPosUsed := make([]int, 0)
-		for _, startPos := range purb.SuiteInfoMap[cornerstone.SuiteName].AllowedPositions {
+		for _, startPos := range purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].AllowedPositions {
 			if startPos < len(bytes) {
 				cornerstoneStartPosUsed = append(cornerstoneStartPosUsed, startPos)
 			}
@@ -40,7 +40,7 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 		cornerstoneRangesUsed := make([]string, 0)
 		cornerstoneRangesValues := make([][]byte, 0)
 		for _, startPos := range cornerstoneStartPosUsed {
-			endPos := startPos + purb.SuiteInfoMap[cornerstone.SuiteName].CornerstoneLength
+			endPos := startPos + purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].CornerstoneLength
 			if endPos > len(bytes) {
 				endPos = len(bytes)
 			}

@@ -12,6 +12,11 @@ import (
 func main() {
 	// this is public and fixed across all purbs
 	suitesInfo := getDummySuiteInfo()
+	symmetricKeyWrapperType := purbs.STREAM
+	verbose := false
+	simplified := false // when "true", does not use hash tables (but linear mapping)
+	// this "params" should be fixed. They are not so you can play with different things, but in practice, the encoder has them burnt-in
+	publicFixedParams := purbs.NewPublicFixedParameters(suitesInfo, symmetricKeyWrapperType, simplified)
 
 	msg := "And presently I was driving through the drizzle of the dying day, with the windshield wipers in full action but unable to cope with my tears."
 
@@ -19,14 +24,11 @@ func main() {
 	fmt.Println(hex.Dump([]byte(msg)))
 	fmt.Println()
 
-	simplified := false // when "true", does not use hash tables (but linear mapping)
 	stream := random.New()
-	verbose := false
-	symmetricKeyWrapperType := purbs.STREAM
 
 	// Encode (this sets-up many things, but does not output []bytes)
 	recipients := createRecipients(1)
-	purb, err := purbs.PURBEncode([]byte(msg), recipients, suitesInfo, symmetricKeyWrapperType, stream, simplified, verbose)
+	purb, err := purbs.PURBEncode([]byte(msg), recipients, stream, publicFixedParams, verbose)
 	if err != nil {
 		panic(err.Error())
 	}

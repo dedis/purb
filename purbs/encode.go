@@ -13,8 +13,16 @@ import (
 	"strconv"
 )
 
+func NewPublicFixedParameters(infoMap SuiteInfoMap, keywrap SYMMETRIC_KEY_WRAPPER_TYPE, simplifiedEntryPointTable bool) *PurbPublicFixedParameters {
+	return &PurbPublicFixedParameters{
+		SuiteInfoMap: infoMap,
+		EntrypointEncryptionType: keywrap,
+		SimplifiedEntrypointsPlacement: simplifiedEntryPointTable,
+	}
+}
+
 // Creates a PURB from some data and Recipients information
-func PURBEncode(data []byte, recipients []Recipient, infoMap SuiteInfoMap, keywrap SYMMETRIC_KEY_WRAPPER_TYPE, stream cipher.Stream, simplifiedEntryPointTable bool, verbose bool) (*Purb, error) {
+func PURBEncode(data []byte, recipients []Recipient, stream cipher.Stream, params *PurbPublicFixedParameters, verbose bool) (*Purb, error) {
 
 	// generate payload PayloadKey and global nonce. It could be passed by an application above
 	key := make([]byte, SYMMETRIC_KEY_LENGTH)
@@ -36,20 +44,18 @@ func PURBEncode(data []byte, recipients []Recipient, infoMap SuiteInfoMap, keywr
 		Header:                         nil,
 		Payload:                        nil,
 		PayloadKey:                     key,
-		IsVerbose:                      verbose,
-		SimplifiedEntrypointsPlacement: simplifiedEntryPointTable,
 		Recipients:                     recipients,
-		SuiteInfoMap:                   infoMap,
-		EntrypointEncryptionType:       keywrap,
 		Stream:       stream,
 		OriginalData: data, // just for statistics
+		PublicParameters: params,
+		IsVerbose: verbose,
 	}
 
 	if purb.IsVerbose {
 		log.LLvlf3("Created an empty PURB, original data %v, payload key %v, nonce %v", data, key, nonce)
 		log.LLvlf3("Recipients %+v", recipients)
-		for i := range infoMap {
-			log.LLvlf3("SuiteInfoMap [%v]: len %v, positions %+v", i, infoMap[i].CornerstoneLength, infoMap[i].AllowedPositions)
+		for i := range purb.PublicParameters.SuiteInfoMap {
+			log.LLvlf3("SuiteInfoMap [%v]: len %v, positions %+v", i, purb.PublicParameters.SuiteInfoMap[i].CornerstoneLength, purb.PublicParameters.SuiteInfoMap[i].AllowedPositions)
 		}
 	}
 
@@ -68,7 +74,7 @@ func PURBEncode(data []byte, recipients []Recipient, infoMap SuiteInfoMap, keywr
 func (purb *Purb) ConstructHeader() {
 
 	purb.Header = newEmptyHeader()
-	switch purb.EntrypointEncryptionType {
+	switch purb.PublicParameters.EntrypointEncryptionType {
 	case STREAM:
 		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
 	case AEAD:
@@ -84,7 +90,7 @@ func (purb *Purb) ConstructHeader() {
 		panic(err)
 	}
 
-	if purb.SimplifiedEntrypointsPlacement {
+	if purb.PublicParameters.SimplifiedEntrypointsPlacement {
 		purb.placeEntrypointsSimplified(orderedSuites)
 	} else {
 		purb.placeEntrypoints(orderedSuites)
@@ -122,7 +128,7 @@ func (purb *Purb) createCornerstonesAndEntrypoints() {
 				continue
 			}
 
-			if keyPair.Hiding.HideLen() != purb.SuiteInfoMap[recipient.SuiteName].CornerstoneLength {
+			if keyPair.Hiding.HideLen() != purb.PublicParameters.SuiteInfoMap[recipient.SuiteName].CornerstoneLength {
 				log.Fatal("Length of elligator Encoded PayloadKey is not what we expect. It's ", keyPair.Hiding.HideLen())
 			}
 
@@ -215,7 +221,7 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 	orderedSuites := make([]string, 0)
 	for _, cornerstone := range cornerstones {
 
-		suiteInfo := purb.SuiteInfoMap[cornerstone.SuiteName]
+		suiteInfo := purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName]
 		if suiteInfo == nil {
 			return nil, errors.New("we do not have suiteInfo about the needed suite")
 		}
@@ -264,7 +270,7 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 		for entrypointID, entrypoint := range purb.Header.EntryPoints[suite] {
 
 			//hash table initialStartPos right after the cornerstone's offset-0
-			initialStartPos := purb.SuiteInfoMap[suite].AllowedPositions[0] + purb.SuiteInfoMap[suite].CornerstoneLength
+			initialStartPos := purb.PublicParameters.SuiteInfoMap[suite].AllowedPositions[0] + purb.PublicParameters.SuiteInfoMap[suite].CornerstoneLength
 
 			//initial hash table size
 			tableSize := 1
@@ -316,7 +322,7 @@ func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
 	for _, suite := range orderedSuites {
 		for entryPointID := range purb.Header.EntryPoints[suite] {
 			//hash table startPos right after the cornerstone's offset-0
-			startPos := purb.SuiteInfoMap[suite].AllowedPositions[0] + purb.SuiteInfoMap[suite].CornerstoneLength
+			startPos := purb.PublicParameters.SuiteInfoMap[suite].AllowedPositions[0] + purb.PublicParameters.SuiteInfoMap[suite].CornerstoneLength
 
 			for {
 				if purb.Header.Layout.Reserve(startPos, startPos+purb.Header.EntryPointLength, true, "hash"+strconv.Itoa(startPos)) {
@@ -421,7 +427,7 @@ func (purb *Purb) ToBytes() []byte {
 	entrypointContent := append(purb.PayloadKey, payloadOffset...)
 	for _, entrypointsPerSuite := range purb.Header.EntryPoints {
 		for _, entrypoint := range entrypointsPerSuite {
-			switch purb.EntrypointEncryptionType {
+			switch purb.PublicParameters.EntrypointEncryptionType {
 			case STREAM:
 				// we use shared secret as a seed to a Stream cipher
 				xof := entrypoint.Recipient.Suite.XOF(entrypoint.SharedSecret)
@@ -477,7 +483,7 @@ func (purb *Purb) ToBytes() []byte {
 		cornerstoneLength := len(cornerstone.Bytes)
 		xorOfAllPositions := make([]byte, cornerstoneLength)
 
-		for _, cornerstoneAllowedPos := range purb.SuiteInfoMap[cornerstone.SuiteName].AllowedPositions {
+		for _, cornerstoneAllowedPos := range purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].AllowedPositions {
 			endPos := cornerstoneAllowedPos + cornerstoneLength
 
 			// check that we have data at non-primary positions to xor

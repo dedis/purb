@@ -96,7 +96,8 @@ func MeasureNumRecipients() {
 			}
 
 			// ----------- PURBs simplified ---------------
-			purb, err := purbs.PURBEncode(msg, decs, si, ENTRYPOINT_TYPE, random.New(), true, VERBOSE)
+			publicFixedParams := purbs.NewPublicFixedParameters(si, ENTRYPOINT_TYPE, true)
+			purb, err := purbs.PURBEncode(msg, decs, random.New(), publicFixedParams, VERBOSE)
 			blob := purb.ToBytes()
 			if err != nil {
 				panic(err.Error())
@@ -113,7 +114,8 @@ func MeasureNumRecipients() {
 			}
 
 			// ----------------- PURBs --------------------
-			purb, err = purbs.PURBEncode(msg, decs, si, ENTRYPOINT_TYPE, random.New(), SIMPLIFIED_PURB, VERBOSE)
+			publicFixedParams = purbs.NewPublicFixedParameters(si, ENTRYPOINT_TYPE, false)
+			purb, err = purbs.PURBEncode(msg, decs, random.New(), publicFixedParams, VERBOSE)
 			blob = purb.ToBytes()
 			if err != nil {
 				panic(err.Error())
@@ -162,18 +164,19 @@ func MeasureHeaderSize() {
 			log.Println("Iteration ", k)
 			// Baseline
 			// create the PURB datastructure
+
+			publicFixedParams := purbs.NewPublicFixedParameters(si, ENTRYPOINT_TYPE, false)
+
 			p := &purbs.Purb{
 				Nonce:      nonce,
 				Header:     nil,
 				Payload:    nil,
 				PayloadKey: key,
 				IsVerbose:       false,
-				SimplifiedEntrypointsPlacement: true,
 				Recipients:      decs,
-				SuiteInfoMap:         si,
-				EntrypointEncryptionType: purbs.STREAM,
 				Stream:          random.New(),
 				OriginalData:    nil,
+				PublicParameters: publicFixedParams,
 			}
 
 			p.ConstructHeader()
@@ -226,6 +229,8 @@ func MeasureEncryptionTime() {
 	for _, nsuite := range nsuites {
 		fmt.Println("Suites =", nsuite)
 		si := createMultiInfo(nsuite)
+		publicFixedParams := purbs.NewPublicFixedParameters(si, ENTRYPOINT_TYPE, false)
+
 		for _, N := range recs {
 			if N < nsuite {
 				continue
@@ -233,7 +238,7 @@ func MeasureEncryptionTime() {
 			decs := createMultiDecoders(N, si)
 			m := newMonitor()
 			for i := 0; i < 21; i++ {
-				_, err := purbs.PURBEncode(msg, decs, si, ENTRYPOINT_TYPE, random.New(), SIMPLIFIED_PURB, VERBOSE)
+				_, err := purbs.PURBEncode(msg, decs, random.New(), publicFixedParams, VERBOSE)
 				fmt.Printf("%f\n", m.recordAndReset())
 				if err != nil {
 					panic(err.Error())
@@ -247,8 +252,9 @@ func DecodeOne() {
 	msg := []byte("And presently I was driving through the drizzle of the dying day, " +
 		"with the windshield wipers in full action but unable to cope with my tears.")
 	si := createInfo()
+	publicFixedParams := purbs.NewPublicFixedParameters(si, ENTRYPOINT_TYPE, SIMPLIFIED_PURB)
 	decs := createDecoders(1)
-	purb, err := purbs.PURBEncode(msg, decs, si, ENTRYPOINT_TYPE, random.New(), SIMPLIFIED_PURB, VERBOSE)
+	purb, err := purbs.PURBEncode(msg, decs, random.New(), publicFixedParams, VERBOSE)
 	if err != nil {
 		panic(err.Error())
 	}

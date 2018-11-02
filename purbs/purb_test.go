@@ -11,6 +11,7 @@ import (
 )
 
 func TestGenCornerstones(t *testing.T) {
+	publicFixedParams := NewPublicFixedParameters(getDummySuiteInfo(3), STREAM, false)
 	purb := &Purb{
 		Nonce:      nil,
 		Header:     nil,
@@ -19,16 +20,14 @@ func TestGenCornerstones(t *testing.T) {
 
 		IsVerbose:                true,
 		Recipients:               nil,
-		SuiteInfoMap:             nil,
-		EntrypointEncryptionType: STREAM,
 		Stream: random.New(),
+		PublicParameters: publicFixedParams,
 	}
 
-	purb.SuiteInfoMap = getDummySuiteInfo(3)
-	purb.Recipients = createRecipients(6, purb.SuiteInfoMap)
+	purb.Recipients = createRecipients(6, purb.PublicParameters.SuiteInfoMap)
 
 	purb.Header = newEmptyHeader()
-	switch purb.EntrypointEncryptionType {
+	switch purb.PublicParameters.EntrypointEncryptionType {
 	case STREAM:
 		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
 	case AEAD:
@@ -50,7 +49,8 @@ func TestPurbCreation(t *testing.T) {
 	infoMap := getDummySuiteInfo(2)
 	recipients := createRecipients(1, infoMap)
 
-	purb, err := PURBEncode(data, recipients, infoMap, STREAM, random.New(), true, true)
+	publicFixedParams := NewPublicFixedParameters(infoMap, STREAM, false)
+	purb, err := PURBEncode(data, recipients, random.New(), publicFixedParams, true)
 
 	if err != nil {
 		t.Error(err)
@@ -83,8 +83,10 @@ func TestEncodeDecode(t *testing.T) {
 			suitesInfo := getDummySuiteInfo(nSuites)
 			recipients := createRecipients(nRecipients, suitesInfo)
 
+			publicFixedParams := NewPublicFixedParameters(suitesInfo, STREAM, false)
+
 			// try encode
-			purb, err := PURBEncode(data, recipients, suitesInfo, keyWrapperType, stream, simplified, verbose)
+			purb, err := PURBEncode(data, recipients, stream, publicFixedParams, verbose)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -133,8 +135,10 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 			suitesInfo := getDummySuiteInfo(nSuites)
 			recipients := createRecipients(nRecipients, suitesInfo)
 
+			publicFixedParams := NewPublicFixedParameters(suitesInfo, STREAM, false)
+
 			// try encode
-			purb, err := PURBEncode(data, recipients, suitesInfo, keyWrapperType, stream, simplified, verbose)
+			purb, err := PURBEncode(data, recipients, stream, publicFixedParams, verbose)
 			if err != nil {
 				log.Fatal(err)
 			}
