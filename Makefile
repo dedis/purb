@@ -2,8 +2,6 @@
 
 install:
 	go get -u -tags=vartime -v ./...
-	$(MAKE) -C purbs install
-	$(MAKE) -C experiments-encoding install
 
 example:
 	go run -tags=vartime example.go
