@@ -17,18 +17,18 @@ func TestGenCornerstones(t *testing.T) {
 		Payload:    nil,
 		PayloadKey: nil,
 
-		isVerbose:       true,
-		recipients:      nil,
-		infoMap:         nil,
-		symmKeyWrapType: STREAM,
-		stream:          random.New(),
+		IsVerbose:                true,
+		Recipients:               nil,
+		SuiteInfoMap:             nil,
+		EntrypointEncryptionType: STREAM,
+		Stream: random.New(),
 	}
 
-	purb.infoMap = getDummySuiteInfo(3)
-	purb.recipients = createRecipients(6, purb.infoMap)
+	purb.SuiteInfoMap = getDummySuiteInfo(3)
+	purb.Recipients = createRecipients(6, purb.SuiteInfoMap)
 
 	purb.Header = newEmptyHeader()
-	switch purb.symmKeyWrapType {
+	switch purb.EntrypointEncryptionType {
 	case STREAM:
 		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
 	case AEAD:
@@ -79,7 +79,7 @@ func TestEncodeDecode(t *testing.T) {
 	for nSuites := 1; nSuites < maxSuites; nSuites++ {
 		for nRecipients := 1; nRecipients < maxRecipients; nRecipients++ {
 
-			log.Lvl1("Testing for", nSuites, "suites and", nRecipients, "recipients")
+			log.Lvl1("Testing for", nSuites, "suites and", nRecipients, "Recipients")
 			suitesInfo := getDummySuiteInfo(nSuites)
 			recipients := createRecipients(nRecipients, suitesInfo)
 
@@ -129,7 +129,7 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 	for nSuites := 1; nSuites < maxSuites; nSuites++ {
 		for nRecipients := 1; nRecipients < maxRecipients; nRecipients++ {
 
-			log.Lvl1("Testing for", nSuites, "suites and", nRecipients, "recipients")
+			log.Lvl1("Testing for", nSuites, "suites and", nRecipients, "Recipients")
 			suitesInfo := getDummySuiteInfo(nSuites)
 			recipients := createRecipients(nRecipients, suitesInfo)
 

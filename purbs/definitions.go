@@ -25,7 +25,7 @@ const CORNERSTONE_LENGTH = 32
 type SYMMETRIC_KEY_WRAPPER_TYPE int8
 
 const (
-	// STREAM encrypts the entrypoint with a stream cipher
+	// STREAM encrypts the entrypoint with a Stream cipher
 	STREAM SYMMETRIC_KEY_WRAPPER_TYPE = iota
 
 	// AEAD encrypt the entrypoint with a AEAD. Not supported yet!
@@ -62,14 +62,15 @@ type Purb struct {
 	Payload    []byte // Payload contains already padded plaintext
 	PayloadKey []byte // Payload PayloadKey
 
-	isVerbose bool // If true, the various operations on the data structure will print what is happening
+	IsVerbose                      bool // If true, the various operations on the data structure will print what is happening
+	SimplifiedEntrypointsPlacement bool // If true, does not use hash tables for entrypoints
 
-	recipients      []Recipient                // tuple with (Suite, PublicKey, PrivateKey)
-	infoMap         SuiteInfoMap               // public suite information (Allowed Positions, etc)
-	symmKeyWrapType SYMMETRIC_KEY_WRAPPER_TYPE // type of encryption for the Entrypoints (symmetric or AEAD)
-	stream          cipher.Stream              // Used to get randomness
+	Recipients               []Recipient                // tuple with (Suite, PublicKey, PrivateKey)
+	SuiteInfoMap             SuiteInfoMap               // public suite information (Allowed Positions, etc)
+	EntrypointEncryptionType SYMMETRIC_KEY_WRAPPER_TYPE // type of encryption for the Entrypoints (symmetric or AEAD)
+	Stream                   cipher.Stream              // Used to get randomness
 
-	originalData []byte // Kept to compare between "Payload" and this
+	OriginalData []byte // Kept to compare between "Payload" and this
 }
 
 // Structure defining the actual header of a purb
