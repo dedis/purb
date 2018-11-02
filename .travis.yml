@@ -1,8 +1,8 @@
 language: go
-go:
-- 1.10
+
 install:
 - make install
+
 script:
 - make test
 - make lint

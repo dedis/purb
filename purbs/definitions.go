@@ -22,37 +22,15 @@ const MAC_AUTHENTICATION_TAG_LENGTH = SYMMETRIC_KEY_LENGTH
 const CORNERSTONE_LENGTH = 32
 
 // Approaches to wrap a symmetric PayloadKey used to encrypt the payload
-type SYMMETRIC_KEY_WRAPPER_TYPE int8
+type ENTRYPOINT_ENCRYPTION_TYPE int8
 
 const (
 	// STREAM encrypts the entrypoint with a Stream cipher
-	STREAM SYMMETRIC_KEY_WRAPPER_TYPE = iota
+	STREAM ENTRYPOINT_ENCRYPTION_TYPE = iota
 
 	// AEAD encrypt the entrypoint with a AEAD. Not supported yet!
 	AEAD
 )
-
-// Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
-var HASHTABLE_COLLISION_LINEAR_PLACEMENT_ATTEMPTS = 3
-
-// Suite defines the required functionalities for each suite from kyber
-type Suite interface {
-	kyber.Encoding
-	kyber.Group
-	kyber.HashFactory
-	kyber.XOFFactory
-	kyber.Random
-}
-
-// A map of suite->info, info being the length of a marshalled public key, and the Allowed Positions in the purb header
-type SuiteInfoMap map[string]*SuiteInfo
-
-// SuiteInfo holds possible positions whose cornerstones might take in a header
-// and a PayloadKey length for this suite
-type SuiteInfo struct {
-	AllowedPositions  []int // alternative PayloadKey/point position in purb header
-	CornerstoneLength int   // length of each PayloadKey/point in bytes
-}
 
 // Structure to define the whole PURB
 type Purb struct {
@@ -72,8 +50,29 @@ type Purb struct {
 // This struct's contents are *not* parameters to the PURBs. Here they vary for the simulations and the plots, but they should be fixed for all purbs
 type PurbPublicFixedParameters struct {
 	SuiteInfoMap                   SuiteInfoMap               // public suite information (Allowed Positions, etc)
-	EntrypointEncryptionType       SYMMETRIC_KEY_WRAPPER_TYPE // type of encryption for the Entrypoints (symmetric or AEAD)
+	EntrypointEncryptionType       ENTRYPOINT_ENCRYPTION_TYPE // type of encryption for the Entrypoints (symmetric or AEAD)
 	SimplifiedEntrypointsPlacement bool                       // If true, does not use hash tables for entrypoints
+
+	HashTableCollisionLinearResolutionAttempts int // Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
+}
+
+// Suite defines the required functionalities for each suite from kyber
+type Suite interface {
+	kyber.Encoding
+	kyber.Group
+	kyber.HashFactory
+	kyber.XOFFactory
+	kyber.Random
+}
+
+// A map of suite->info, info being the length of a marshalled public key, and the Allowed Positions in the purb header
+type SuiteInfoMap map[string]*SuiteInfo
+
+// SuiteInfo holds possible positions whose cornerstones might take in a header
+// and a PayloadKey length for this suite
+type SuiteInfo struct {
+	AllowedPositions  []int // alternative PayloadKey/point position in purb header
+	CornerstoneLength int   // length of each PayloadKey/point in bytes
 }
 
 // Structure defining the actual header of a purb

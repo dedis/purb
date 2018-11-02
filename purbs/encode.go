@@ -14,11 +14,12 @@ import (
 )
 
 // Creates a struct with parameters that are *fixed* across all PURBs. Should be constants, but here it is a variable for simulating various parameters
-func NewPublicFixedParameters(infoMap SuiteInfoMap, keywrap SYMMETRIC_KEY_WRAPPER_TYPE, simplifiedEntryPointTable bool) *PurbPublicFixedParameters {
+func NewPublicFixedParameters(infoMap SuiteInfoMap, keywrap ENTRYPOINT_ENCRYPTION_TYPE, simplifiedEntryPointTable bool) *PurbPublicFixedParameters {
 	return &PurbPublicFixedParameters{
 		SuiteInfoMap:                   infoMap,
 		EntrypointEncryptionType:       keywrap,
 		SimplifiedEntrypointsPlacement: simplifiedEntryPointTable,
+		HashTableCollisionLinearResolutionAttempts: 3,
 	}
 }
 
@@ -283,7 +284,7 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 
 			// we start with a 1-sized hash table, try to place (and break on success), otherwise it grows by 2
 			for {
-				for j := 0; j < HASHTABLE_COLLISION_LINEAR_PLACEMENT_ATTEMPTS; j++ {
+				for j := 0; j < purb.PublicParameters.HashTableCollisionLinearResolutionAttempts; j++ {
 					posInHashTable = (intOfHashedValue + j) % tableSize
 
 					effectiveStartPos := initialStartPos + posInHashTable*purb.Header.EntryPointLength

@@ -183,17 +183,17 @@ func MeasureHeaderSize() {
 			flat = append(flat, p.Header.Length)
 
 			// 1 attempt
-			purbs.HASHTABLE_COLLISION_LINEAR_PLACEMENT_ATTEMPTS = 1
+			p.PublicParameters.HashTableCollisionLinearResolutionAttempts = 1
 			p.Header = nil
 			p.ConstructHeader()
 			slack1 = append(slack1, p.Header.Length)
 			// 3 attempts
-			purbs.HASHTABLE_COLLISION_LINEAR_PLACEMENT_ATTEMPTS = 3
+			p.PublicParameters.HashTableCollisionLinearResolutionAttempts = 3
 			p.Header = nil
 			p.ConstructHeader()
 			slack3 = append(slack3, p.Header.Length)
 			// 10 attempts
-			purbs.HASHTABLE_COLLISION_LINEAR_PLACEMENT_ATTEMPTS = 10
+			p.PublicParameters.HashTableCollisionLinearResolutionAttempts = 10
 			p.Header = nil
 			p.ConstructHeader()
 			slack10 = append(slack10, p.Header.Length)

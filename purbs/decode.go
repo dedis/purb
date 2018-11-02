@@ -68,12 +68,12 @@ func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 
 	// Now we try to decrypt iteratively the entrypoints and check if the decrypted PayloadKey works for AEAD of payload
 	if !publicFixedParameters.SimplifiedEntrypointsPlacement {
-		return entrypointTrialDecode(data, recipient, sharedSecret, suiteInfo, publicFixedParameters.EntrypointEncryptionType, verbose)
+		return entrypointTrialDecode(data, recipient, sharedSecret, suiteInfo, publicFixedParameters.EntrypointEncryptionType, publicFixedParameters.HashTableCollisionLinearResolutionAttempts, verbose)
 	}
 	return entrypointTrialDecodeSimplified(data, recipient, sharedSecret, suiteInfo, publicFixedParameters.EntrypointEncryptionType, verbose)
 }
 
-func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, symmKeyWrapType SYMMETRIC_KEY_WRAPPER_TYPE, verbose bool) (bool, []byte, error) {
+func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, symmKeyWrapType ENTRYPOINT_ENCRYPTION_TYPE, hashTableLinearResolutionCollisionAttempt int, verbose bool) (bool, []byte, error) {
 
 	var entrypointLength int
 	switch symmKeyWrapType {
@@ -94,7 +94,7 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 		var entrypointIndexInHashTable int
 
 		// try each position, and up to HASHTABLE_COLLISION_LINEAR_PLACEMENT_ATTEMPTS later
-		for j := 0; j < HASHTABLE_COLLISION_LINEAR_PLACEMENT_ATTEMPTS; j++ {
+		for j := 0; j < hashTableLinearResolutionCollisionAttempt; j++ {
 			entrypointIndexInHashTable = (intOfHashedValue + j) % tableSize
 
 			entrypointStartPos := hashTableStartPos + entrypointIndexInHashTable*entrypointLength
@@ -145,7 +145,7 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 	return false, nil, errors.New("no entrypoint was correctly decrypted")
 }
 
-func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, symmKeyWrapType SYMMETRIC_KEY_WRAPPER_TYPE, verbose bool) (bool, []byte, error) {
+func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, symmKeyWrapType ENTRYPOINT_ENCRYPTION_TYPE, verbose bool) (bool, []byte, error) {
 	startPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
 	var entrypointLength int
