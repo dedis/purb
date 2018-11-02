@@ -1,7 +1,7 @@
 .PHONY: install example demo test simul padme-figures
 
 install:
-	go get -u -tags=vartime ./...
+	go get -u -tags=vartime -v -x ./...
 
 example:
 	go run -tags=vartime example.go
