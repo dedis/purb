@@ -44,8 +44,8 @@ PURB created:
 000000d0  be fc b7 63 0f 9e 0a 20  b8 91 82 54 aa 7e 9a 80  |...c... ...T.~..|
 ```
 
-```
 PURB's internal structure:
+```
 *** PURB Details ***
 Original Data: len 141
 PURB: header at 0 (len 64), payload at 64 (len 160), total 224 bytes
