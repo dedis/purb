@@ -1,11 +1,11 @@
-# Padded Uniform Random Blobs
+# Padded Uniform Random Blobs [![Build Status](https://travis-ci.org/dedis/paper_purbs.svg?branch=master)](https://travis-ci.org/dedis/paper_purbs)
 
 A library for a novel encoding approach preventing metadata leakage for encrypted communication and data at rest.
 
 ```
+make install
 make example
 ```
-(if this does not work, you can get the librairies by doing `make install`)
 
 The folder `experiments-encoding` contains simulation about PURBs encoding and decoding, and the duration of those operations.
 
