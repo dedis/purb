@@ -9,7 +9,7 @@ import (
 // RangeReservationLayout is used to represent a []byte array with (potentially overlapping) range=region reservations
 // Expose "Reset()", "Reserve(range)", and "ScanFree"
 type RegionReservationStruct struct {
-	regions []*Region // important, those ranges are *always* sorted by startPos
+	regions          []*Region // important, those ranges are *always* sorted by startPos
 	coalescedRegions []*Region // same as "regions" but coalesced, e.g., [10-150],[100-1000] becomes [10-1000]
 }
 
@@ -30,8 +30,8 @@ func (r *RegionReservationStruct) Reset() {
 func (r *RegionReservationStruct) addThenSort(startPos int, endPos int, label string) {
 	newRegion := &Region{
 		startPos: startPos,
-		endPos: endPos,
-		label: label,
+		endPos:   endPos,
+		label:    label,
 	}
 	r.regions = append(r.regions, newRegion)
 	insertionSort(r.regions)
@@ -110,6 +110,7 @@ func (r *RegionReservationStruct) ScanFreeRegions(f func(int, int), maxByteOffse
 	}
 }
 
+// ToString // thank you golang for forcing me to comment on "ToString()"
 func (r *RegionReservationStruct) ToString() string {
 	s := ""
 	for k, region := range r.regions {
@@ -120,11 +121,12 @@ func (r *RegionReservationStruct) ToString() string {
 
 // tuple (startPos, endPos, label)
 type Region struct {
-	startPos   int
-	endPos     int
-	label      string
+	startPos int
+	endPos   int
+	label    string
 }
 
+// ToString // thank you golang for forcing me to comment on "ToString()"
 func (r *Region) ToString() string {
 	s := ""
 	s += fmt.Sprintf("%v:%v \"%v\"", r.startPos, r.endPos, r.label)

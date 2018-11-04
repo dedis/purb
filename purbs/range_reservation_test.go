@@ -1,8 +1,8 @@
 package purbs
 
 import (
-"testing"
-"strconv"
+	"strconv"
+	"testing"
 )
 
 func TestInsertionSort(t *testing.T) {
