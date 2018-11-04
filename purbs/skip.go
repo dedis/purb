@@ -1,214 +1,227 @@
 package purbs
 
-/* Code credit to Matthew Underwood*/
+/* Code credit to Matthew Underwood, simplified by LB */
 
 import (
-	"encoding/binary"
-	"github.com/dedis/kyber/util/random"
+	"fmt"
+	"github.com/dedis/onet/log"
 )
 
-// Pick a uint32 uniformly at random
-func randUint32() uint32 {
-	b := make([]byte, 4)
-	random.Bytes(b, random.New())
-	return binary.LittleEndian.Uint32(b)
+// RangeReservationLayout is used to represent a []byte array with (potentially overlapping) range reservations
+// Expose "Reset()" and "Reserve(range)"
+// Think of Ranges as column-wise (along X axis); this struct has several *rows* of Ranges
+type RangeReservationLayout struct {
+	rows []*Range
 }
 
-// Pick a random height for a new skip-list node from a suitable distribution.
-func skipHeight() int {
-	height := 1
-	for v := randUint32() | (1 << 31); v&1 == 0; v >>= 1 {
-		height++
-	}
-	return height
+// NewSkipLayout creates a new RangeReservationLayout
+func NewRangeReservationLayout() *RangeReservationLayout {
+	layout := new(RangeReservationLayout)
+	layout.Reset()
+	return layout
 }
 
-// low - start, high - end, s
-// uc - next
-type skipNode struct {
-	low, high int
-	suc       []*skipNode
-	name      string
-}
-
-// Skip-list reservation structure.
-// XXX currently we never coalesce reserved regions,
-// and operation would probably be much more efficient if we did.
-type SkipLayout struct {
-	head []*skipNode
-}
-
-// Marks all regions as free
-func (sl *SkipLayout) Reset() {
-	sl.head = make([]*skipNode, 1) // minimum stack height
-}
-
-// Create a new skip-list iterator.
-// An iterator is a stack of pointers to next pointers, one per level.
-func (sl *SkipLayout) iter() []**skipNode {
-	pos := make([]**skipNode, len(sl.head))
-	for i := range pos {
-		pos[i] = &sl.head[i]
-	}
-	return pos
-}
-
-// Advance a position vector past a given node,
-// which must be pointed to by one of the current position pointers.
-func (sl *SkipLayout) skip(pos []**skipNode, past *skipNode) {
-	for i := range past.suc {
-		pos[i] = &past.suc[i]
-	}
-}
-
-// Find the position past all nodes strictly before byte offset ofs.
-func (sl *SkipLayout) find(ofs int) []**skipNode {
-	pos := sl.iter()
-	for i := len(pos) - 1; i >= 0; i-- {
-		for n := *pos[i]; n != nil && n.high <= ofs; n = *pos[i] {
-			// Advance past n at all levels up through i
-			sl.skip(pos, n)
-		}
-	}
-	return pos
-}
-
-// Insert a new node at a given iterator position, and skip past it.
-// May extend the iterator slice, so returns a new position slice.
-func (sl *SkipLayout) insert(pos []**skipNode, lo, hi int,
-	name string) []**skipNode {
-
-	nsuc := make([]*skipNode, skipHeight())
-	n := skipNode{lo, hi, nsuc, name}
-
-	// Insert the new node at all appropriate levels
-	for i := range nsuc {
-		if i == len(pos) {
-			// base node's stack not high enough, extend it
-			sl.head = append(sl.head, nil)
-			pos = append(pos, &sl.head[i])
-		}
-		nsuc[i] = *pos[i]
-		*pos[i] = &n
-		pos[i] = &nsuc[i]
-	}
-	return pos
+// Reset marks all regions as free
+func (r *RangeReservationLayout) Reset() {
+	r.rows = make([]*Range, 1) //only one head, which is empty
 }
 
 // Attempt to reserve a specific extent in the layout.
 // If excl is true, either reserve it exclusively or fail without modification.
 // If excl is false, reserve region even if some or all of it already reserved.
 // Returns true if requested region was reserved exclusively, false if not.
-func (sl *SkipLayout) Reserve(lo, hi int, excl bool, name string) bool {
+func (r *RangeReservationLayout) Reserve(startPos int, endPos int, requireFree bool, label string) bool {
 
 	// Find the position past all nodes strictly before our interest area
-	pos := sl.find(lo)
+	iterators := r.findAllRangesStrictlyBefore(startPos)
 
 	// Can we get an exclusive reservation?
-	suc := *pos[0]
-	gotExcl := true
-	if suc != nil && suc.low < hi { // suc overlaps what we want?
-		if excl {
-			return false // excl required but can't get
+	firstRange := *iterators[0]
+	dataOverwritten := true
+	if firstRange != nil && firstRange.startPos < endPos { // successors overlaps what we want?
+		if requireFree {
+			return false // we require the region to be free, but it's not, abort
 		}
-		gotExcl = false
+		dataOverwritten = false // we didn't require the region to be free, gonna reserve, but indicate that we overwrote something
 	}
 
 	// Reserve any parts of this extent not already reserved.
-	for lo < hi {
-		suc = *pos[0]
-		if suc != nil && suc.low <= lo {
-			// suc occupies first part of our region, so skip it
-			lo = suc.high
-			sl.skip(pos, suc)
+	for startPos < endPos {
+		firstRange = *iterators[0]
+		if firstRange != nil && firstRange.startPos <= startPos {
+			// successors occupies first part of our region, so advanceIteratorUntil it
+			startPos = firstRange.endPos
+			r.advanceIteratorUntil(iterators, firstRange)
 			continue
 		}
 
-		// How big of a reservation can we insert here?
-		inshi := hi
-		if suc != nil && suc.low < inshi {
-			inshi = suc.low // end at start of next existing region
+		// How big of a reservation can we insertBefore here?
+		alternativeEndPos := endPos
+		if firstRange != nil && firstRange.startPos < alternativeEndPos {
+			alternativeEndPos = firstRange.startPos // end at start of next existing region
 		}
-		if lo >= inshi {
-			panic("trying to insert empty reservation")
+		if startPos >= alternativeEndPos {
+			panic("trying to insertBefore empty reservation")
 		}
-		//log.Printf("Skip inserting [%d-%d]\n", lo, hi)
+		log.Printf("Skip inserting [%d-%d]\n", startPos, endPos)
 
-		// Insert a new reservation here, then skip past it.
-		pos = sl.insert(pos, lo, inshi, name)
-		lo = inshi
+		// Insert a new reservation here, then advance past it.
+		iterators = r.insertBefore(iterators, startPos, alternativeEndPos, label)
+		startPos = alternativeEndPos
 	}
 
-	return gotExcl
-}
-
-// Find and reserve the first available l-byte region in the layout.
-func (sl *SkipLayout) alloc(l int, name string) int {
-
-	pos := sl.iter()
-	ofs := 0
-	for { // Find a position to insert
-		suc := *pos[0]
-		if suc == nil {
-			break // no more reservations; definitely room here!
-		}
-		avail := suc.low - ofs
-		if avail >= l {
-			break // there's enough room here
-		}
-		sl.skip(pos, suc)
-		ofs = suc.high
-	}
-
-	// Insert new region here
-	sl.insert(pos, ofs, ofs+l, name)
-	return ofs
+	return dataOverwritten
 }
 
 // Call the supplied function on every free region in the layout,
 // up to a given maximum byte offset.
-func (sl *SkipLayout) scanFree(f func(int, int), max int) {
+func (r *RangeReservationLayout) ScanFreeRegions(f func(int, int), maxByteOffset int) {
 
-	pos := sl.iter()
-	ofs := 0
+	iterators := r.iterators()
+	startOffset := 0
 	for {
-		suc := *pos[0]
-		if suc == nil {
-			break // no more reservations
+		currentRange := *iterators[0]
+		if currentRange == nil {
+			break
 		}
-		if suc.low > ofs {
-			//log.Printf("The zone to random [%d-%d]\n", ofs, suc.low)
-			f(ofs, suc.low)
+		if currentRange.startPos > startOffset {
+			// we scan the free region between 0 and this range
+			f(startOffset, currentRange.startPos)
 		}
-		sl.skip(pos, suc)
-		ofs = suc.high
+		r.advanceIteratorUntil(iterators, currentRange)
+		startOffset = currentRange.endPos
 	}
-	if ofs < max {
-		f(ofs, max)
+	// do not forget the region between the last range (if any) and the maxByteOffset (free by definition)
+	if startOffset < maxByteOffset {
+		f(startOffset, maxByteOffset)
 	}
 }
 
-func (sl *SkipLayout) dump() {
+// tuple (startPos, endPos, label) with potentially linked successors (this is the elem of a linked list)
+type Range struct {
+	startPos   int
+	endPos     int
+	label      string
+	successors []*Range
+}
 
-	pos := make([]**skipNode, len(sl.head))
-	//fmt.Printf("Skip-list levels: %d\n", len(pos))
-	for i := range pos {
-		pos[i] = &sl.head[i]
-		//fmt.Printf(" H%d: %p\n", i, *pos[i])
+func (r *Range) ToString() string {
+	s := ""
+	s += fmt.Sprintf("[%v:%v \"%v\", successors: %v]", r.startPos, r.endPos, r.label, len(r.successors))
+	return s
+}
+
+// An iterators is a stack of pointers to next pointers, one per level.
+func (r *RangeReservationLayout) iterators() []**Range {
+
+	iterators := make([]**Range, len(r.rows))
+
+	// copy the rows into the iterator
+	for i := range iterators {
+		iterators[i] = &r.rows[i]
 	}
-	for n := *pos[0]; n != nil; n = *pos[0] {
-		for j := range n.suc { // skip-list invariant check
-			//fmt.Printf(" S%d: %p\n", j, n.suc[j])
-			if *pos[j] != n {
-				panic("bad suc pointer")
+	return iterators
+}
+
+// Advance an iterator past a given node, which must be pointed to by one of the current iterator pointers.
+func (r *RangeReservationLayout) advanceIteratorUntil(iterator []**Range, past *Range) {
+	for i := range past.successors {
+		iterator[i] = &past.successors[i]
+	}
+}
+
+// Find all the ranges strictly before the byte offset.
+func (r *RangeReservationLayout) findAllRangesStrictlyBefore(byteOffset int) []**Range {
+
+	iterators := r.iterators()
+
+	//for each iterator, starting from the deepest
+	for row := len(iterators) - 1; row >= 0; row-- {
+
+		// find all nodes in this list, iff the highPos of the node is <= of the considered byteOffset
+		for {
+			currentRange := *iterators[row]
+
+			if currentRange == nil {
+				break
 			}
-			pos[j] = &n.suc[j]
+			if currentRange.endPos > byteOffset {
+				break
+			}
+
+			r.advanceIteratorUntil(iterators, currentRange)
 		}
 	}
-	for i := range pos {
-		n := *pos[i]
+	return iterators
+}
+
+// Insert a new node at a given iterators position, and advance past it.
+// May extend the iterators slice, so returns a new position slice.
+func (r *RangeReservationLayout) insertBefore(iterators []**Range, startPos int, endPos int, label string) []**Range {
+
+	successors := make([]*Range, 1)
+	n := Range{startPos, endPos, label, successors}
+
+	// Insert the new node at all appropriate levels
+	for i := range successors {
+
+		if i == len(iterators) {
+			// base node's stack not high enough, extend it
+			r.rows = append(r.rows, nil)
+			iterators = append(iterators, &r.rows[i])
+		}
+		// copy the first Range into "successor"
+		successors[i] = *iterators[i]
+
+		// the previous Range (now copied into "successor") is this node being built
+		*iterators[i] = &n
+
+		// in the thing we return, we return this range
+		iterators[i] = &successors[i]
+	}
+	return iterators
+}
+
+func (r *RangeReservationLayout) dump() {
+
+	iterators := make([]**Range, len(r.rows))
+	fmt.Printf("rows: %d\n", len(iterators))
+
+	for i := range iterators {
+		iterators[i] = &r.rows[i]
+		if *iterators[i] != nil {
+			fmt.Printf(" H%d: %v\n", i, (*iterators[i]).ToString())
+		} else {
+			fmt.Printf(" H%d: nil\n", i)
+		}
+	}
+
+	currentRange := *iterators[0]
+	for {
+		if currentRange == nil {
+			break
+		}
+
+		for j := range currentRange.successors {
+
+			if currentRange.successors[j] != nil {
+				fmt.Printf(" S%d: %v\n", j, currentRange.successors[j].ToString())
+			} else {
+				fmt.Printf(" S%d: nil\n", j)
+			}
+
+			if *iterators[j] != currentRange {
+				panic("bad successors pointer")
+			}
+			iterators[j] = &currentRange.successors[j]
+		}
+
+		currentRange = *iterators[0]
+	}
+	for i := range iterators {
+		n := *iterators[i]
 		if n != nil {
-			panic("orphaned skip-node: " + n.name)
+			panic("orphaned advanceIteratorUntil-node: " + n.label)
 		}
 	}
 }
