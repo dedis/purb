@@ -113,7 +113,7 @@ func (purb *Purb) createCornerstonesAndEntrypoints() {
 		}
 		header.EntryPoints[recipient.SuiteName] = append(header.EntryPoints[recipient.SuiteName], newEntryPoint(recipient))
 
-		// now create the said cornerstone. We skip if we already have a cornerstone for this suite (LB->Kirill: can't two Recipients share the same suite?)
+		// now create the said cornerstone. We advanceIteratorUntil if we already have a cornerstone for this suite (LB->Kirill: can't two Recipients share the same suite?)
 		if header.Cornerstones[recipient.SuiteName] != nil {
 			continue
 		}
@@ -189,14 +189,13 @@ func (purb *Purb) computeSharedSecrets() {
 // Writes cornerstone values to the first available entries of the ones assigned for use ciphersuites
 func (purb *Purb) placeCornerstones() ([]string, error) {
 	// Create two reservation layouts:
-	// - In w.layout only each ciphersuite's primary position is reserved.
+	// - In the header layout only each ciphersuite's primary position is reserved.
 	// - In excludeLayout we reserve _all_ positions in each ciphersuite.
 	// Since the ciphersuites' points will be computed in this same order,
 	// each successive ciphersuite's primary position must not overlap
 	// any point position for any ciphersuite previously computed,
 	// but can overlap positions for ciphersuites to be computed later.
-	var excludeLayout SkipLayout
-	excludeLayout.Reset()
+	excludeLayout := NewRegionReservationStruct()
 
 	// Place a nonce for AEAD first at the beginning of purb
 	excludeLayout.Reserve(0, AEAD_NONCE_LENGTH, true, "nonce")
@@ -237,7 +236,13 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 
 			startPos := suiteInfo.AllowedPositions[j]
 			endPos := startPos + suiteInfo.CornerstoneLength
-			if excludeLayout.Reserve(startPos, endPos, false, cornerstone.SuiteName) && j == primary-1 {
+
+			// TODO: this part is still hard to understand. Refactor!
+
+			wasFree := excludeLayout.IsFree(startPos, endPos)
+			excludeLayout.Reserve(startPos, endPos, false, cornerstone.SuiteName)
+
+			if wasFree && j == primary-1 {
 				//log.Printf("Reserving [%d-%d] for suite %s\n", startPos, endPos, cornerstone.SuiteName)
 				primary = j // no conflict, shift down
 			}
@@ -265,7 +270,7 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 	return orderedSuites, nil
 }
 
-// placeEntrypoints will find, place and reserve part of the header for the data
+// placeEntrypoints will findAllRangesStrictlyBefore, place and reserve part of the header for the data
 // All hash tables start after their cornerstone.
 func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 	for _, suite := range orderedSuites {
@@ -319,7 +324,7 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 	}
 }
 
-// placeEntrypoints will find, place and reserve part of the header for the data. Does not use a hash table, put the points linearly
+// placeEntrypoints will findAllRangesStrictlyBefore, place and reserve part of the header for the data. Does not use a hash table, put the points linearly
 func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
 	for _, suite := range orderedSuites {
 		for entryPointID := range purb.Header.EntryPoints[suite] {
@@ -457,7 +462,7 @@ func (purb *Purb) ToBytes() []byte {
 			log.LLvlf3("Adding random bytes in [%v:%v]", low, high)
 		}
 	}
-	purb.Header.Layout.scanFree(fillRndFunction, buffer.length())
+	purb.Header.Layout.ScanFreeRegions(fillRndFunction, buffer.length())
 
 	//log.Printf("Final length of header: %d", len(p.buf))
 	//log.Printf("Random with header: %x", p.buf)
@@ -491,7 +496,7 @@ func (purb *Purb) ToBytes() []byte {
 			// check that we have data at non-primary positions to xor
 			if endPos > buffer.length() {
 				if cornerstoneAllowedPos > buffer.length() {
-					// the position is fully outside the blob; we skip this cornerstone
+					// the position is fully outside the blob; we advanceIteratorUntil this cornerstone
 					break
 				} else {
 					// the position is partially inside the blob; take only this
@@ -527,6 +532,7 @@ func newEmptyHeader() *Header {
 		Cornerstones:     make(map[string]*Cornerstone),
 		Length:           0,
 		EntryPointLength: 0,
+		Layout:           NewRegionReservationStruct(),
 	}
 }
 
