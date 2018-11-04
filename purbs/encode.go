@@ -189,14 +189,13 @@ func (purb *Purb) computeSharedSecrets() {
 // Writes cornerstone values to the first available entries of the ones assigned for use ciphersuites
 func (purb *Purb) placeCornerstones() ([]string, error) {
 	// Create two reservation layouts:
-	// - In w.layout only each ciphersuite's primary position is reserved.
+	// - In the header layout only each ciphersuite's primary position is reserved.
 	// - In excludeLayout we reserve _all_ positions in each ciphersuite.
 	// Since the ciphersuites' points will be computed in this same order,
 	// each successive ciphersuite's primary position must not overlap
 	// any point position for any ciphersuite previously computed,
 	// but can overlap positions for ciphersuites to be computed later.
-	var excludeLayout RangeReservationLayout
-	excludeLayout.Reset()
+	excludeLayout := NewRegionReservationStruct()
 
 	// Place a nonce for AEAD first at the beginning of purb
 	excludeLayout.Reserve(0, AEAD_NONCE_LENGTH, true, "nonce")
@@ -237,7 +236,14 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 
 			startPos := suiteInfo.AllowedPositions[j]
 			endPos := startPos + suiteInfo.CornerstoneLength
-			if excludeLayout.Reserve(startPos, endPos, false, cornerstone.SuiteName) && j == primary-1 {
+			log.Info("Attempting to reserve", startPos, endPos, "for", cornerstone.SuiteName)
+
+			// TODO: this part is still hard to understand. Refactor!
+
+			wasFree := excludeLayout.IsFree(startPos, endPos)
+			excludeLayout.Reserve(startPos, endPos, false, cornerstone.SuiteName)
+
+			if wasFree && j == primary-1 {
 				//log.Printf("Reserving [%d-%d] for suite %s\n", startPos, endPos, cornerstone.SuiteName)
 				primary = j // no conflict, shift down
 			}
@@ -527,6 +533,7 @@ func newEmptyHeader() *Header {
 		Cornerstones:     make(map[string]*Cornerstone),
 		Length:           0,
 		EntryPointLength: 0,
+		Layout:           NewRegionReservationStruct(),
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 // Expose "Reset()", "Reserve(range)", and "ScanFree"
 type RegionReservationStruct struct {
 	regions []*Region // important, those ranges are *always* sorted by startPos
+	coalescedRegions []*Region // same as "regions" but coalesced, e.g., [10-150],[100-1000] becomes [10-1000]
 }
 
 // NewSkipLayout creates a new RangeReservationLayout
@@ -22,6 +23,7 @@ func NewRegionReservationStruct() *RegionReservationStruct {
 // Reset marks all regions as free
 func (r *RegionReservationStruct) Reset() {
 	r.regions = make([]*Region, 0)
+	r.coalescedRegions = make([]*Region, 0)
 }
 
 // Adds a region, then performs insertion sort on the regions
@@ -33,12 +35,33 @@ func (r *RegionReservationStruct) addThenSort(startPos int, endPos int, label st
 	}
 	r.regions = append(r.regions, newRegion)
 	insertionSort(r.regions)
+	r.coalescedRegions = coalesceRegions(r.regions)
+}
+
+// Returns true iff the requested region is free
+func (r *RegionReservationStruct) IsFree(startPos int, endPos int) bool {
+
+	// if the layout is empty, everything is free!
+	if len(r.regions) == 0 {
+		return true
+	}
+
+	// check if there is a conflict with a coalesced region
+	for _, region := range r.coalescedRegions {
+		if startPos >= region.endPos || endPos <= region.startPos {
+			// does not collide
+		} else {
+			return false
+		}
+	}
+	return true
 }
 
 // Attempt to reserve a specific extent in the layout.
-// If requireFree is true, either reserve it exclusively or fail without modification.
-// If requireFree is false, reserve region even if some or all of it already reserved.
-// Returns true if requested region was reserved exclusively, false if not.
+// Region work as [startPos, endPos[
+// If requireFree is true, attempt to reserve it exclusively (return true) or fails (return false)
+// If requireFree is false, reserve region even if some or all of it already reserved. (always returns true)
+// Returns true if requested region was reserved, false if not.
 func (r *RegionReservationStruct) Reserve(startPos int, endPos int, requireFree bool, label string) bool {
 
 	// easiest case: if we don't care about the region being free, just add the region
@@ -47,21 +70,8 @@ func (r *RegionReservationStruct) Reserve(startPos int, endPos int, requireFree 
 		return true
 	}
 
-	// harder case, we need to check whether the interval is free
-	// dumb first step: coalesce all, then check
-	coalescedRegions := onePassCoalesceRegions(r.regions)
-
-	collision := false
-	for _, region := range coalescedRegions {
-		if endPos < region.startPos || startPos > region.endPos {
-			// does not collide
-		} else {
-			fmt.Println("yes")
-			collision = true
-		}
-	}
-
-	if collision {
+	// other case, we need to check whether the interval is free
+	if !r.IsFree(startPos, endPos) {
 		// we couldn't reserve
 		return false
 	}
@@ -80,27 +90,7 @@ func (r *RegionReservationStruct) ScanFreeRegions(f func(int, int), maxByteOffse
 	}
 
 	// coalesce all regions into ranges
-	coalescedRegions := make([]*Region, 0)
-
-	for _, region := range r.regions {
-		hasCoalesced := false
-
-		for i := range coalescedRegions {
-			if region.DoesOverlapWith(coalescedRegions[i]) {
-				// replace the region already in coalescedRegions with the new merged range
-				coalescedRegions[i] = region.ComputeOverlap(coalescedRegions[i])
-				hasCoalesced = true
-			}
-		}
-
-		// we did not coalesce, just add
-		if !hasCoalesced {
-			coalescedRegions = append(coalescedRegions, region)
-		} else {
-			// we did coalesce, *but* we might have missed more coalescing (cascade), redo 1 pass
-			coalescedRegions = onePassCoalesceRegions(coalescedRegions)
-		}
-	}
+	coalescedRegions := r.coalescedRegions
 
 	// we have a coalesced region, just loop through and call the appropriate function
 	currentOffset := 0
@@ -120,6 +110,14 @@ func (r *RegionReservationStruct) ScanFreeRegions(f func(int, int), maxByteOffse
 	}
 }
 
+func (r *RegionReservationStruct) ToString() string {
+	s := ""
+	for k, region := range r.regions {
+		s += fmt.Sprintf("%v: %v\n", k, region.ToString())
+	}
+	return s
+}
+
 // tuple (startPos, endPos, label)
 type Region struct {
 	startPos   int
@@ -133,20 +131,18 @@ func (r *Region) ToString() string {
 	return s
 }
 
-// returns true iff offset \in [startPos, endPos]
-func (r *Region) Contains(offset int) bool {
-	if offset < r.startPos || r.endPos < offset {
+// returns true iff the two regions overlap
+func (r *Region) DoesOverlapWith(otherRegion *Region) bool {
+
+	// r fully before otherRegion
+	if r.endPos <= otherRegion.startPos {
+		return false
+	}
+	// otherregion fully before r
+	if otherRegion.endPos <= r.startPos {
 		return false
 	}
 	return true
-}
-
-// returns true iff the two regions overlap
-func (r *Region) DoesOverlapWith(otherRegion *Region) bool {
-	if r.Contains(otherRegion.startPos) || r.Contains(otherRegion.endPos) {
-		return true
-	}
-	return false
 }
 
 // returns true iff the two regions overlap
@@ -168,7 +164,33 @@ func (r *Region) ComputeOverlap(otherRegion *Region) *Region {
 	return newRegion
 }
 
+func coalesceRegions(regions []*Region) []*Region {
+	coalescedRegions := make([]*Region, 0)
+
+	for _, region := range regions {
+		hasCoalesced := false
+
+		for i := range coalescedRegions {
+			if region.DoesOverlapWith(coalescedRegions[i]) {
+				// replace the region already in coalescedRegions with the new merged range
+				coalescedRegions[i] = region.ComputeOverlap(coalescedRegions[i])
+				hasCoalesced = true
+			}
+		}
+
+		// we did not coalesce, just add
+		if !hasCoalesced {
+			coalescedRegions = append(coalescedRegions, region)
+		} else {
+			// we did coalesce, *but* we might have missed more coalescing (cascade), redo 1 pass
+			coalescedRegions = onePassCoalesceRegions(coalescedRegions)
+		}
+	}
+	return coalescedRegions
+}
+
 func onePassCoalesceRegions(regions []*Region) []*Region {
+
 	outputRegions := make([]*Region, 0)
 
 	for _, region := range regions {

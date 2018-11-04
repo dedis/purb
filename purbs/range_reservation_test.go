@@ -76,6 +76,28 @@ func TestRangeReservation(t *testing.T) {
 		t.Error("Reserve should work")
 	}
 
+	// scanner should give three regions
+	regions = make([]string, 0)
+	scanner = func(start, end int) {
+		regions = append(regions, strconv.Itoa(start)+":"+strconv.Itoa(end))
+	}
+	layout.ScanFreeRegions(scanner, endPos)
+	if regions[0] != "0:10" {
+		t.Error("First free region should be 0:10, was", regions[0])
+	}
+	if regions[1] != "100:150" {
+		t.Error("Second free region should be 100:150, was", regions[1])
+	}
+	if regions[2] != "200:1000" {
+		t.Error("Third free region should be 200:1000, was", regions[2])
+	}
+
+	// Coalescing should work
+	success = layout.Reserve(100, 150, true, "block100-150")
+	if !success {
+		t.Error("Reserve should work")
+	}
+
 	// scanner should give two regions
 	regions = make([]string, 0)
 	scanner = func(start, end int) {
@@ -83,13 +105,28 @@ func TestRangeReservation(t *testing.T) {
 	}
 	layout.ScanFreeRegions(scanner, endPos)
 	if regions[0] != "0:10" {
-		t.Error("First free region should be 0:10")
+		t.Error("First free region should be 0:10, was", regions[0])
 	}
-	if regions[1] != "100:150" {
-		t.Error("Second free region should be 100:150")
-	}
-	if regions[2] != "200:1000" {
-		t.Error("Third free region should be 200:1000")
+	if regions[1] != "200:1000" {
+		t.Error("Second free region should be 200:1000, was", regions[1])
 	}
 
+	// Coalescing should work
+	success = layout.Reserve(3, 203, false, "block2-3")
+	if !success {
+		t.Error("Reserve should work")
+	}
+
+	// scanner should give two regions
+	regions = make([]string, 0)
+	scanner = func(start, end int) {
+		regions = append(regions, strconv.Itoa(start)+":"+strconv.Itoa(end))
+	}
+	layout.ScanFreeRegions(scanner, endPos)
+	if regions[0] != "0:3" {
+		t.Error("First free region should be 0:3, was", regions[0])
+	}
+	if regions[1] != "203:1000" {
+		t.Error("Second free region should be 203:1000, was", regions[1])
+	}
 }

@@ -79,7 +79,7 @@ type SuiteInfo struct {
 type Header struct {
 	EntryPoints      map[string][]*EntryPoint // map of suiteName -> []entrypoints
 	Cornerstones     map[string]*Cornerstone  // Holds sender's ephemeral private/public keys for each suite in the header
-	Layout           RangeReservationLayout   // An array of byte slices where each of the bytes slice represents a hash table entry
+	Layout           *RegionReservationStruct // An array of byte slices where each of the bytes slice represents a hash table entry
 	Length           int                      //
 	EntryPointLength int                      // Length of each encrypted entry point
 }
