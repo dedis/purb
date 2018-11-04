@@ -236,7 +236,6 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 
 			startPos := suiteInfo.AllowedPositions[j]
 			endPos := startPos + suiteInfo.CornerstoneLength
-			log.Info("Attempting to reserve", startPos, endPos, "for", cornerstone.SuiteName)
 
 			// TODO: this part is still hard to understand. Refactor!
 
