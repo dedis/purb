@@ -1,4 +1,4 @@
-# Padded Uniform Random Blobs [![Build Status](https://travis-ci.org/dedis/paper_purbs.svg?branch=master)](https://travis-ci.org/dedis/paper_purbs)
+# Padded Uniform Random Blobs [![Build Status](https://travis-ci.org/dedis/purbs.svg?branch=master)](https://travis-ci.org/dedis/purbs)
 
 A library for a novel encoding approach preventing metadata leakage for encrypted communication and data at rest.
 
