@@ -5,8 +5,8 @@ type GrowableBuffer struct {
 	buffer []byte
 }
 
-// Grow the message buffer to include the region from startByte to endByte,
-// and return a slice representing that region.
+// Grow the message buffer to include the byteRangeForAllowedPositionIndex from startByte to endByte,
+// and return a slice representing that byteRangeForAllowedPositionIndex.
 func (gb *GrowableBuffer) growAndGetRegion(startByte, endByte int) []byte {
 	if gb.buffer == nil {
 		gb.buffer = make([]byte, 0)

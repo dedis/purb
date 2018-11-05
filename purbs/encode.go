@@ -188,72 +188,79 @@ func (purb *Purb) computeSharedSecrets() {
 
 // Writes cornerstone values to the first available entries of the ones assigned for use ciphersuites
 func (purb *Purb) placeCornerstones() ([]string, error) {
-	// Create two reservation layouts:
-	// - In the header layout only each ciphersuite's primary position is reserved.
-	// - In excludeLayout we reserve _all_ positions in each ciphersuite.
-	// Since the ciphersuites' points will be computed in this same order,
-	// each successive ciphersuite's primary position must not overlap
-	// any point position for any ciphersuite previously computed,
-	// but can overlap positions for ciphersuites to be computed later.
-	excludeLayout := NewRegionReservationStruct()
 
-	// Place a nonce for AEAD first at the beginning of purb
-	excludeLayout.Reserve(0, AEAD_NONCE_LENGTH, true, "nonce")
-	purb.Header.Layout.Reserve(0, AEAD_NONCE_LENGTH, true, "nonce")
+	// To compute the "main layout", we use a secondary layout to keep track of things.
+	// it is discarded at the end, and only helps computing mainLayout
+	// the key is that every Suite has *multiple possible positions* for placing a sortedCornerstones
+	// we start by placing the "longest" (bit-wise) cornerstone since it has more chance to collide with something
+	// when placed.
+	mainLayout := purb.Header.Layout
+	secondaryLayout := NewRegionReservationStruct()
 
-	// copy all cornerstones
-	cornerstones := make([]*Cornerstone, 0)
+	// we first reserve the spot for the nonce
+	mainLayout.Reserve(0, AEAD_NONCE_LENGTH, true, "nonce")
+	secondaryLayout.Reserve(0, AEAD_NONCE_LENGTH, true, "nonce")
+
+	// we then sort the sortedCornerstones by their length
+	sortedCornerstones := make([]*Cornerstone, 0)
 	for _, cornerstone := range purb.Header.Cornerstones {
-		cornerstones = append(cornerstones, cornerstone)
+		sortedCornerstones = append(sortedCornerstones, cornerstone)
 	}
 
-	// Sort the cornerstones such as the ones with the longest PayloadKey length are placed first.
-	// If the lengths are equal, then the sort is lexicographic
-	sort.Slice(cornerstones, func(i, j int) bool {
-		if len(cornerstones[i].Bytes) > len(cornerstones[j].Bytes) {
+	sortFunction := func(i, j int) bool {
+		if len(sortedCornerstones[i].Bytes) > len(sortedCornerstones[j].Bytes) {
 			return true
 		}
-		if len(cornerstones[i].Bytes) == len(cornerstones[j].Bytes) {
-			return cornerstones[i].SuiteName < cornerstones[j].SuiteName
+		if len(sortedCornerstones[i].Bytes) == len(sortedCornerstones[j].Bytes) {
+			return sortedCornerstones[i].SuiteName < sortedCornerstones[j].SuiteName
 		}
 		return false
-	})
+	}
 
-	orderedSuites := make([]string, 0)
-	for _, cornerstone := range cornerstones {
+	sort.Slice(sortedCornerstones, sortFunction)
 
+	// we find the suite informations (in the same order as the cornerstones)
+	sortedSuites := make([]string, 0)
+	for _, cornerstone := range sortedCornerstones {
 		suiteInfo := purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName]
 		if suiteInfo == nil {
 			return nil, errors.New("we do not have suiteInfo about the needed suite")
 		}
+		sortedSuites = append(sortedSuites, cornerstone.SuiteName)
+	}
 
-		orderedSuites = append(orderedSuites, cornerstone.SuiteName)
+	// for each cornerstone,
+	for index, cornerstone := range sortedCornerstones {
 
-		// Reserve all our possible positions in excludeLayout layout,
-		// picking the first non-conflicting position as our primary.
-		primary := len(suiteInfo.AllowedPositions)
-		for j := primary - 1; j >= 0; j-- {
+		suiteInfo := purb.PublicParameters.SuiteInfoMap[sortedSuites[index]]
+		allowedPositions := suiteInfo.AllowedPositions
 
-			startPos := suiteInfo.AllowedPositions[j]
+		// find the first free position in the layout. We use the "secondaryLayout" since secondary positions are *not* free for other cornerstones !
+		smallestNonConflictingIndex := -1
+		for index, startPos := range allowedPositions {
 			endPos := startPos + suiteInfo.CornerstoneLength
 
-			// TODO: this part is still hard to understand. Refactor!
-
-			wasFree := excludeLayout.IsFree(startPos, endPos)
-			excludeLayout.Reserve(startPos, endPos, false, cornerstone.SuiteName)
-
-			if wasFree && j == primary-1 {
-				//log.Printf("Reserving [%d-%d] for suite %s\n", startPos, endPos, cornerstone.SuiteName)
-				primary = j // no conflict, shift down
+			if secondaryLayout.IsFree(startPos, endPos) {
+				smallestNonConflictingIndex = index
+				break
 			}
 		}
-		if primary == len(suiteInfo.AllowedPositions) {
+
+		if smallestNonConflictingIndex == -1 {
 			return nil, errors.New("no viable position for suite " + cornerstone.SuiteName)
 		}
-		purb.Header.Cornerstones[cornerstone.SuiteName].Offset = suiteInfo.AllowedPositions[primary]
 
-		// Permanently reserve the primary point position in h.Layout
-		startBit, endBit := suiteInfo.region(primary)
+		// We found the position for this suite, reserve it ...
+		startBit, endBit := suiteInfo.byteRangeForAllowedPositionIndex(smallestNonConflictingIndex)
+
+		// ... in the main layout
+		if !mainLayout.Reserve(startBit, endBit, true, cornerstone.SuiteName) {
+			panic("The position is supposed to be free !")
+		}
+
+		// ... in the cornerstone struct (which will be used when placing the entrypoints)
+		purb.Header.Cornerstones[cornerstone.SuiteName].Offset = startBit
+
 		if endBit > purb.Header.Length {
 			purb.Header.Length = endBit
 		}
@@ -262,12 +269,20 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 			log.LLvlf3("Found position for cornerstone %v, start %v, end %v", cornerstone.SuiteName, startBit, endBit)
 		}
 
-		//log.Printf("reserving [%d-%d] for suite %s\n", startBit, endBit, cornerstone.SuiteName)
-		if !purb.Header.Layout.Reserve(startBit, endBit, true, cornerstone.SuiteName) {
-			panic("thought we had that position reserved??")
+		// finally, reserve *all* possible position in the secondaryLayout. The final step of the PURB
+		// creation is to ensure that the XOR of those values equals the value of the cornerstone, so we must have some
+		// degree of freedom here, we can't place other cornerstones
+
+		for _, startPos := range allowedPositions {
+			endPos := startPos + suiteInfo.CornerstoneLength
+
+			// we don't care if we get those bytes exclusively (hence requireFree=false), we just want to prevent
+			// future suites/cornerstone from using them as a primary position
+			secondaryLayout.Reserve(startPos, endPos, false, cornerstone.SuiteName)
 		}
 	}
-	return orderedSuites, nil
+
+	return sortedSuites, nil
 }
 
 // placeEntrypoints will findAllRangesStrictlyBefore, place and reserve part of the header for the data
@@ -545,9 +560,9 @@ func (purb *Purb) newCornerStone(suiteName string, keyPair *key.Pair) *Cornersto
 	}
 }
 
-// Return the byte-range for a point at a given level.
-func (si *SuiteInfo) region(level int) (int, int) {
-	low := si.AllowedPositions[level]
+// Return the byte-range (start:end) for a cornerstone's position index.
+func (si *SuiteInfo) byteRangeForAllowedPositionIndex(index int) (int, int) {
+	low := si.AllowedPositions[index]
 	high := low + si.CornerstoneLength
 	return low, high
 }
