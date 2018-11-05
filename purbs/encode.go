@@ -189,10 +189,16 @@ func (purb *Purb) computeSharedSecrets() {
 // Writes cornerstone values to the first available entries of the ones assigned for use ciphersuites
 func (purb *Purb) placeCornerstones() ([]string, error) {
 
-	// To compute the "main layout", we use a secondary layout to keep track of things.
-	// it is discarded at the end, and only helps computing mainLayout
-	// the key is that every Suite has *multiple possible positions* for placing a sortedCornerstones
-	// we start by placing the "longest" (bit-wise) cornerstone since it has more chance to collide with something
+	// To compute the "main layout", we use a secondary layout to keep track of things. It is discarded at the end, and only helps computing mainLayout.
+	// Two things to remember:
+	// (1) every Suite has *multiple possible positions* for placing a cornerstone.
+	// (2) when the PURB is finalized, the decoder can XOR *all possible positions* (within the payload) to get the cornerstone
+	// In principle, when we found the primary position for a suite, we don't care what's gonna be in the remaining positions,
+	// *but* it cannot be another cornerstone since we need to ensure there is at least one degree of freedom to ensure property
+	// (2). Hence, we place cornerstone where they don't collide with other "things" in the primary payload (which is normal),
+	// but also they cannot collide with other suite's allowed positions (represented by the secondaryLayout).
+	// On the other hand, other "things" (entrypoints, data), can collide with the non-primary positions of the suites.
+	// Final note: we start by placing the "longest" (bit-wise) cornerstone since it has more chance to collide with something
 	// when placed.
 	mainLayout := purb.Header.Layout
 	secondaryLayout := NewRegionReservationStruct()
