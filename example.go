@@ -12,11 +12,10 @@ import (
 func main() {
 	// this is public and fixed across all purbs
 	suitesInfo := getDummySuiteInfo()
-	symmetricKeyWrapperType := purbs.STREAM
 	verbose := false
 	simplified := false // when "true", does not use hash tables (but linear mapping)
 	// this "params" should be fixed. They are not so you can play with different things, but in practice, the encoder has them burnt-in
-	publicFixedParams := purbs.NewPublicFixedParameters(suitesInfo, symmetricKeyWrapperType, simplified)
+	publicFixedParams := purbs.NewPublicFixedParameters(suitesInfo, simplified)
 
 	msg := "And presently I was driving through the drizzle of the dying day, with the windshield wipers in full action but unable to cope with my tears."
 

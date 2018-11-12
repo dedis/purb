@@ -1,5 +1,6 @@
 package main
 
+/*
 import (
 	"github.com/dedis/purbs/purbs"
 )
@@ -11,3 +12,4 @@ func main() {
 	purbs.SimulMeasureEncryptionTime()
 	purbs.SimulDecodeOne()
 }
+*/
