@@ -1,6 +1,8 @@
 package main
 
 /*
+// Great, go forbids having two files with main().
+
 import (
 	"github.com/dedis/purbs/purbs"
 )
