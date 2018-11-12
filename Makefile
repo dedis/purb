@@ -1,4 +1,4 @@
-.PHONY: install example demo test simul padme-figures
+.PHONY: install example demo test simul padme-figures clean
 
 install:
 	go get -u -tags=vartime -v ./...
@@ -10,15 +10,17 @@ demo: example
 
 test:
 	$(MAKE) -C purbs test
-	$(MAKE) -C experiments-encoding test
 
 simul:
-	$(MAKE) -C experiments-encoding simul
+	go run -tags=vartime simul.go
 
 padme-figures:
 	$(MAKE) -C experiments-padding all
 
 lint:
 	$(MAKE) -C purbs lint
+
+clean:
+	rm -f simul_*.txt
 
 all: install test example

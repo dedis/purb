@@ -68,20 +68,14 @@ func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 
 	// Now we try to decrypt iteratively the entrypoints and check if the decrypted PayloadKey works for AEAD of payload
 	if !publicFixedParameters.SimplifiedEntrypointsPlacement {
-		return entrypointTrialDecode(data, recipient, sharedSecret, suiteInfo, publicFixedParameters.EntrypointEncryptionType, publicFixedParameters.HashTableCollisionLinearResolutionAttempts, verbose)
+		return entrypointTrialDecode(data, recipient, sharedSecret, suiteInfo, publicFixedParameters.HashTableCollisionLinearResolutionAttempts, verbose)
 	}
-	return entrypointTrialDecodeSimplified(data, recipient, sharedSecret, suiteInfo, publicFixedParameters.EntrypointEncryptionType, verbose)
+	return entrypointTrialDecodeSimplified(data, recipient, sharedSecret, suiteInfo, verbose)
 }
 
-func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, symmKeyWrapType ENTRYPOINT_ENCRYPTION_TYPE, hashTableLinearResolutionCollisionAttempt int, verbose bool) (bool, []byte, error) {
+func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, hashTableLinearResolutionCollisionAttempt int, verbose bool) (bool, []byte, error) {
 
-	var entrypointLength int
-	switch symmKeyWrapType {
-	case STREAM:
-		entrypointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
-	case AEAD:
-		entrypointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN + MAC_AUTHENTICATION_TAG_LENGTH
-	}
+	entrypointLength := SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
 
 	hash := sha256.New()
 	hash.Write(sharedSecret)
@@ -105,30 +99,25 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 				break
 			}
 
-			switch symmKeyWrapType {
-			case STREAM:
-				xof := recipient.Suite.XOF(sharedSecret)
+			xof := recipient.Suite.XOF(sharedSecret)
 
-				decrypted := make([]byte, entrypointLength)
-				xof.XORKeyStream(decrypted, data[entrypointStartPos:entrypointEndPos])
+			decrypted := make([]byte, entrypointLength)
+			xof.XORKeyStream(decrypted, data[entrypointStartPos:entrypointEndPos])
 
-				if verbose {
-					log.LLvlf3("Recovering potential entrypoint [%v:%v], value %v", entrypointStartPos, entrypointEndPos, data[entrypointStartPos:entrypointEndPos])
-					log.LLvlf3("  Attempting decryption with sharedSecret %v", sharedSecret)
-					log.LLvlf3("  yield %v", decrypted)
-				}
+			if verbose {
+				log.LLvlf3("Recovering potential entrypoint [%v:%v], value %v", entrypointStartPos, entrypointEndPos, data[entrypointStartPos:entrypointEndPos])
+				log.LLvlf3("  Attempting decryption with sharedSecret %v", sharedSecret)
+				log.LLvlf3("  yield %v", decrypted)
+			}
 
-				found, errorReason, message := entrypointTrialDecrypt(decrypted, data)
+			found, errorReason, message := entrypointTrialDecrypt(decrypted, data)
 
-				if verbose {
-					log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
-				}
+			if verbose {
+				log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
+			}
 
-				if found {
-					return found, message, nil
-				}
-			case AEAD:
-				panic("not implemented")
+			if found {
+				return found, message, nil
 			}
 		}
 
@@ -145,51 +134,26 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 	return false, nil, errors.New("no entrypoint was correctly decrypted")
 }
 
-func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, entrypointEncryptionType ENTRYPOINT_ENCRYPTION_TYPE, verbose bool) (bool, []byte, error) {
+func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, verbose bool) (bool, []byte, error) {
 	startPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
-	var entrypointLength int
-	switch entrypointEncryptionType {
-	case STREAM:
-		entrypointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
-	case AEAD:
-		entrypointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN + MAC_AUTHENTICATION_TAG_LENGTH
-	}
+	entrypointLength := SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
 
 	for startPos+entrypointLength < len(data) {
-		entrypointBytes := data[startPos:startPos+entrypointLength]
-		switch entrypointEncryptionType {
-		case STREAM:
-			xof := recipient.Suite.XOF(sharedSecret)
-			decrypted := make([]byte, entrypointLength)
-			xof.XORKeyStream(decrypted, entrypointBytes)
-			found, errorReason, message := entrypointTrialDecrypt(decrypted, data)
+		entrypointBytes := data[startPos : startPos+entrypointLength]
 
-			if verbose {
-				log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
-			}
-			if found {
-				return found, message, nil
-			}
-		case AEAD:
-			// we use shared secret as a seed to a Stream cipher
+		xof := recipient.Suite.XOF(sharedSecret)
+		decrypted := make([]byte, entrypointLength)
+		xof.XORKeyStream(decrypted, entrypointBytes)
+		found, errorReason, message := entrypointTrialDecrypt(decrypted, data)
 
-			nonce := data[:AEAD_NONCE_LENGTH]
-			decrypted, err := aeadDecrypt(entrypointBytes, nonce, sharedSecret, nil)
-
-			if err != nil && verbose {
-				log.LLvlf3("  AEAD error, skipping")
-			}
-
-			found, errorReason, message := entrypointTrialDecrypt(decrypted, data)
-
-			if verbose {
-				log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
-			}
-			if found {
-				return found, message, nil
-			}
+		if verbose {
+			log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
 		}
+		if found {
+			return found, message, nil
+		}
+
 		startPos += entrypointLength
 	}
 
@@ -222,7 +186,6 @@ func entrypointTrialDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, strin
 
 	return true, "", msg
 }
-
 
 // Decrypt using AEAD
 func aeadDecrypt(ciphertext, nonce, key, additional []byte) ([]byte, error) {

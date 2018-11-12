@@ -21,17 +21,6 @@ const MAC_AUTHENTICATION_TAG_LENGTH = SYMMETRIC_KEY_LENGTH
 // Length (in bytes) of the Cornerstones (for simplicity assuming all suites HideLen is the same).
 const CORNERSTONE_LENGTH = 32
 
-// Approaches to wrap a symmetric PayloadKey used to encrypt the payload
-type ENTRYPOINT_ENCRYPTION_TYPE int8
-
-const (
-	// STREAM encrypts the entrypoint with a Stream cipher
-	STREAM ENTRYPOINT_ENCRYPTION_TYPE = iota
-
-	// AEAD encrypt the entrypoint with a AEAD. Not supported yet!
-	AEAD
-)
-
 // Structure to define the whole PURB
 type Purb struct {
 	PublicParameters *PurbPublicFixedParameters
@@ -51,9 +40,8 @@ type Purb struct {
 
 // This struct's contents are *not* parameters to the PURBs. Here they vary for the simulations and the plots, but they should be fixed for all purbs
 type PurbPublicFixedParameters struct {
-	SuiteInfoMap                   SuiteInfoMap               // public suite information (Allowed Positions, etc)
-	EntrypointEncryptionType       ENTRYPOINT_ENCRYPTION_TYPE // type of encryption for the Entrypoints (symmetric or AEAD)
-	SimplifiedEntrypointsPlacement bool                       // If true, does not use hash tables for entrypoints
+	SuiteInfoMap                   SuiteInfoMap // public suite information (Allowed Positions, etc)
+	SimplifiedEntrypointsPlacement bool         // If true, does not use hash tables for entrypoints
 
 	HashTableCollisionLinearResolutionAttempts int // Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
 }
@@ -91,7 +79,7 @@ type Cornerstone struct {
 	SuiteName string
 	KeyPair   *key.Pair
 	Offset    int    // Starting byte position in the header
-	EndPos	  int    // Ending byte position in the header
+	EndPos    int    // Ending byte position in the header
 	Bytes     []byte // singleton. Since calling marshalling the KeyPair is non-deterministic, at least we do it only once so prints are consistents
 }
 

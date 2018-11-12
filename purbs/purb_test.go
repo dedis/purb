@@ -11,7 +11,7 @@ import (
 )
 
 func TestGenCornerstones(t *testing.T) {
-	publicFixedParams := NewPublicFixedParameters(getDummySuiteInfo(3), STREAM, false)
+	publicFixedParams := NewPublicFixedParameters(getDummySuiteInfo(3), false)
 	purb := &Purb{
 		Nonce:      nil,
 		Header:     nil,
@@ -27,12 +27,7 @@ func TestGenCornerstones(t *testing.T) {
 	purb.Recipients = createRecipients(6, purb.PublicParameters.SuiteInfoMap)
 
 	purb.Header = newEmptyHeader()
-	switch purb.PublicParameters.EntrypointEncryptionType {
-	case STREAM:
-		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
-	case AEAD:
-		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN + MAC_AUTHENTICATION_TAG_LENGTH
-	}
+	purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
 
 	purb.createCornerstones()
 
@@ -49,7 +44,7 @@ func TestPurbCreation(t *testing.T) {
 	infoMap := getDummySuiteInfo(2)
 	recipients := createRecipients(1, infoMap)
 
-	publicFixedParams := NewPublicFixedParameters(infoMap, STREAM, false)
+	publicFixedParams := NewPublicFixedParameters(infoMap, false)
 	purb, err := Encode(data, recipients, random.New(), publicFixedParams, true)
 
 	if err != nil {
@@ -64,7 +59,6 @@ func TestEncodeDecode(t *testing.T) {
 	simplified := false
 	verbose := false
 	stream := random.New()
-	keyWrapperType := STREAM
 
 	maxSuites := 10
 	maxRecipients := 10
@@ -81,7 +75,7 @@ func TestEncodeDecode(t *testing.T) {
 
 			log.Lvl1("Testing for", nSuites, "suites and", nRecipients, "Recipients")
 			suitesInfo := getDummySuiteInfo(nSuites)
-			publicFixedParams := NewPublicFixedParameters(suitesInfo, keyWrapperType, simplified)
+			publicFixedParams := NewPublicFixedParameters(suitesInfo, simplified)
 
 			recipients := createRecipients(nRecipients, suitesInfo)
 
@@ -116,7 +110,6 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 	simplified := true
 	verbose := false
 	stream := random.New()
-	keyWrapperType := STREAM
 
 	maxSuites := 10
 	maxRecipients := 10
@@ -133,7 +126,7 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 
 			log.Lvl1("Testing for", nSuites, "suites and", nRecipients, "Recipients")
 			suitesInfo := getDummySuiteInfo(nSuites)
-			publicFixedParams := NewPublicFixedParameters(suitesInfo, keyWrapperType, simplified)
+			publicFixedParams := NewPublicFixedParameters(suitesInfo, simplified)
 
 			recipients := createRecipients(nRecipients, suitesInfo)
 

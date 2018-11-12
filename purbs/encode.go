@@ -14,10 +14,9 @@ import (
 )
 
 // Creates a struct with parameters that are *fixed* across all PURBs. Should be constants, but here it is a variable for simulating various parameters
-func NewPublicFixedParameters(infoMap SuiteInfoMap, keywrap ENTRYPOINT_ENCRYPTION_TYPE, simplifiedEntryPointTable bool) *PurbPublicFixedParameters {
+func NewPublicFixedParameters(infoMap SuiteInfoMap, simplifiedEntryPointTable bool) *PurbPublicFixedParameters {
 	return &PurbPublicFixedParameters{
 		SuiteInfoMap:                               infoMap,
-		EntrypointEncryptionType:                   keywrap,
 		SimplifiedEntrypointsPlacement:             simplifiedEntryPointTable,
 		HashTableCollisionLinearResolutionAttempts: 3,
 	}
@@ -67,12 +66,9 @@ func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *P
 func (purb *Purb) CreateHeader() {
 
 	purb.Header = newEmptyHeader()
-	switch purb.PublicParameters.EntrypointEncryptionType {
-	case STREAM:
-		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
-	case AEAD:
-		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN + MAC_AUTHENTICATION_TAG_LENGTH
-	}
+
+	// entrypoints contain the symm key to the payload, and a pointer
+	purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
 
 	purb.createCornerstones()
 	purb.createEntryPoints()
@@ -265,7 +261,6 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 		purb.Header.Cornerstones[cornerstone.SuiteName].Offset = startBit
 		purb.Header.Cornerstones[cornerstone.SuiteName].EndPos = endBit
 
-
 		if purb.IsVerbose {
 			log.LLvlf3("Found position for cornerstone %v, start %v, end %v", cornerstone.SuiteName, startBit, endBit)
 		}
@@ -365,7 +360,7 @@ func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
 // padThenEncryptData takes plaintext data as a byte slice, pads it using PURBs padding scheme,
 // and then encrypts using AEAD encryption scheme
 func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) {
-	paddedData := pad(data, purb.Header.Length() + MAC_AUTHENTICATION_TAG_LENGTH)
+	paddedData := pad(data, purb.Header.Length()+MAC_AUTHENTICATION_TAG_LENGTH)
 
 	if purb.IsVerbose {
 		log.LLvlf3("Payload padded from %v to %v bytes", len(data), len(paddedData))
@@ -381,8 +376,6 @@ func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) {
 		log.LLvlf3("Payload padded encrypted to %v (len %v)", purb.Payload, len(purb.Payload))
 	}
 }
-
-
 
 // ToBytes writes content of entrypoints and encrypted payloads into contiguous buffer
 func (purb *Purb) placePayloadAndCornerstones() {
@@ -419,40 +412,17 @@ func (purb *Purb) placePayloadAndCornerstones() {
 	entrypointContent := append(purb.PayloadKey, payloadOffset...)
 	for _, entrypointsPerSuite := range purb.Header.EntryPoints {
 		for _, entrypoint := range entrypointsPerSuite {
-			switch purb.PublicParameters.EntrypointEncryptionType {
-			case STREAM:
-				// we use shared secret as a seed to a Stream cipher
-				xof := entrypoint.Recipient.Suite.XOF(entrypoint.SharedSecret)
-				startPos := entrypoint.Offset
-				endPos := startPos + purb.Header.EntryPointLength
 
-				region := buffer.growAndGetRegion(startPos, endPos)
-				xof.XORKeyStream(region, entrypointContent)
+			// we use shared secret as a seed to a Stream cipher
+			xof := entrypoint.Recipient.Suite.XOF(entrypoint.SharedSecret)
+			startPos := entrypoint.Offset
+			endPos := startPos + purb.Header.EntryPointLength
 
-				if purb.IsVerbose {
-					log.LLvlf3("Adding symmetric entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v", startPos, endPos, entrypointContent, region, entrypoint.SharedSecret, len(entrypointContent))
-				}
-			case AEAD:
-				// we use shared secret as a seed to a Stream cipher
-				cipher, err := aeadEncrypt(entrypointContent, purb.Nonce, entrypoint.SharedSecret, nil, purb.Stream)
+			region := buffer.growAndGetRegion(startPos, endPos)
+			xof.XORKeyStream(region, entrypointContent)
 
-				if err != nil {
-					log.Fatal("Could not AEAD-encrypt the entrypoint")
-				}
-
-				if len(cipher) != purb.Header.EntryPointLength {
-					log.Fatal("AEAD-Entrypoint length", len(cipher), "but", purb.Header.EntryPointLength, "expected")
-				}
-
-				startPos := entrypoint.Offset
-				endPos := startPos + purb.Header.EntryPointLength
-
-				region := buffer.growAndGetRegion(startPos, endPos)
-				copy(region, cipher)
-
-				if purb.IsVerbose {
-					log.LLvlf3("Adding AEAD entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v", startPos, endPos, entrypointContent, region, entrypoint.SharedSecret, len(entrypointContent))
-				}
+			if purb.IsVerbose {
+				log.LLvlf3("Adding symmetric entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v", startPos, endPos, entrypointContent, region, entrypoint.SharedSecret, len(entrypointContent))
 			}
 		}
 	}
@@ -588,7 +558,7 @@ func (h *Header) Length() int {
 
 	for _, entryPoints := range h.EntryPoints {
 		for _, entrypoint := range entryPoints {
-			if length < entrypoint.Offset + h.EntryPointLength {
+			if length < entrypoint.Offset+h.EntryPointLength {
 				length = entrypoint.Offset + h.EntryPointLength
 			}
 		}
