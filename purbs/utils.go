@@ -20,7 +20,7 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 
 	lines = append(lines, "*** PURB Details ***")
 	lines = append(lines, fmt.Sprintf("Original Data: len %v", len(purb.OriginalData)))
-	lines = append(lines, fmt.Sprintf("PURB: header at 0 (len %v), payload at %v (len %v), total %v bytes", purb.Header.Length, purb.Header.Length, len(purb.Payload), len(bytes)))
+	lines = append(lines, fmt.Sprintf("PURB: header at 0 (len %v), payload at %v (len %v), total %v bytes", purb.Header.Length(), purb.Header.Length(), len(purb.Payload), len(bytes)))
 
 	lines = append(lines, fmt.Sprintf("Nonce: %+v (len %v)", purb.Nonce, len(purb.Nonce)))
 
@@ -68,7 +68,7 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 			lines = append(lines, fmt.Sprintf("  Entrypoints [%v]: %+v @ offset %v (len %v)", index, entrypoint.SharedSecret, entrypoint.Offset, purb.Header.EntryPointLength))
 		}
 	}
-	lines = append(lines, fmt.Sprintf("Padded Payload: %+v @ offset %v (len %v)", purb.Payload, purb.Header.Length, len(purb.Payload)))
+	lines = append(lines, fmt.Sprintf("Padded Payload: %+v @ offset %v (len %v)", purb.Payload, purb.Header.Length(), len(purb.Payload)))
 
 	if !withBoundaries {
 		return strings.Join(lines, "\n")

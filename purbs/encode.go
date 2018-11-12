@@ -14,10 +14,9 @@ import (
 )
 
 // Creates a struct with parameters that are *fixed* across all PURBs. Should be constants, but here it is a variable for simulating various parameters
-func NewPublicFixedParameters(infoMap SuiteInfoMap, keywrap ENTRYPOINT_ENCRYPTION_TYPE, simplifiedEntryPointTable bool) *PurbPublicFixedParameters {
+func NewPublicFixedParameters(infoMap SuiteInfoMap, simplifiedEntryPointTable bool) *PurbPublicFixedParameters {
 	return &PurbPublicFixedParameters{
 		SuiteInfoMap:                               infoMap,
-		EntrypointEncryptionType:                   keywrap,
 		SimplifiedEntrypointsPlacement:             simplifiedEntryPointTable,
 		HashTableCollisionLinearResolutionAttempts: 3,
 	}
@@ -26,26 +25,12 @@ func NewPublicFixedParameters(infoMap SuiteInfoMap, keywrap ENTRYPOINT_ENCRYPTIO
 // Creates a PURB from some data and Recipients information
 func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *PurbPublicFixedParameters, verbose bool) (*Purb, error) {
 
-	// generate payload PayloadKey and global nonce. It could be passed by an application above
-	key := make([]byte, SYMMETRIC_KEY_LENGTH)
-	nonce := make([]byte, AEAD_NONCE_LENGTH)
-	random.Bytes(key, stream)
-	random.Bytes(nonce, stream)
-
-	// some sanity check
-	if len(nonce) != AEAD_NONCE_LENGTH {
-		return nil, errors.New("incorrect nonce size")
-	}
-	if len(key) != SYMMETRIC_KEY_LENGTH {
-		return nil, errors.New("incorrect symmetric PayloadKey size")
-	}
-
 	// create the PURB datastructure
 	purb := &Purb{
-		Nonce:            nonce,
+		Nonce:            nil,
 		Header:           nil,
 		Payload:          nil,
-		PayloadKey:       key,
+		PayloadKey:       nil,
 		Recipients:       recipients,
 		Stream:           stream,
 		OriginalData:     data, // just for statistics
@@ -53,40 +38,41 @@ func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *P
 		IsVerbose:        verbose,
 	}
 
+	// creation of the global Nonce and random playload key
+	purb.Nonce = purb.randomBytes(AEAD_NONCE_LENGTH)
+	purb.PayloadKey = purb.randomBytes(SYMMETRIC_KEY_LENGTH)
+
 	if purb.IsVerbose {
-		log.LLvlf3("Created an empty PURB, original data %v, payload key %v, nonce %v", data, key, nonce)
+		log.LLvlf3("Created an empty PURB, original data %v, payload key %v, nonce %v", data, purb.PayloadKey, purb.Nonce)
 		log.LLvlf3("Recipients %+v", recipients)
 		for i := range purb.PublicParameters.SuiteInfoMap {
 			log.LLvlf3("SuiteInfoMap [%v]: len %v, positions %+v", i, purb.PublicParameters.SuiteInfoMap[i].CornerstoneLength, purb.PublicParameters.SuiteInfoMap[i].AllowedPositions)
 		}
 	}
 
-	purb.ConstructHeader()
+	// creation of the entrypoints and cornerstones, places entrypoint and cornerstones
+	purb.CreateHeader()
 
-	if err := purb.padThenEncryptData(data, stream); err != nil {
-		return nil, err
-	}
+	// creation of the encrypted payload
+	purb.padThenEncryptData(data, stream)
 
-	// Here, things are placed where they should; only the final XORing step for entrypoint needs to be done (in "ToBytes")
+	// converts everything to []byte, performs the XOR trick on the cornerstones
+	purb.placePayloadAndCornerstones()
 
 	return purb, nil
 }
 
-// Construct header finds an appropriate placements for the Entrypoints and the Cornerstones
-func (purb *Purb) ConstructHeader() {
+// Construct header computes and finds an appropriate placements for the Entrypoints and the Cornerstones
+func (purb *Purb) CreateHeader() {
 
 	purb.Header = newEmptyHeader()
-	switch purb.PublicParameters.EntrypointEncryptionType {
-	case STREAM:
-		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
-	case AEAD:
-		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN + MAC_AUTHENTICATION_TAG_LENGTH
-	}
 
-	purb.createCornerstonesAndEntrypoints()
-	purb.computeSharedSecrets()
+	// entrypoints contain the symm key to the payload, and a pointer
+	purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
 
-	purb.Header.Layout.Reset()
+	purb.createCornerstones()
+	purb.createEntryPoints()
+
 	orderedSuites, err := purb.placeCornerstones()
 	if err != nil {
 		panic(err)
@@ -100,20 +86,14 @@ func (purb *Purb) ConstructHeader() {
 }
 
 // Find what unique suites used by the Recipients, generate a private for each of these suites, and assign them to corresponding entry points
-func (purb *Purb) createCornerstonesAndEntrypoints() {
+func (purb *Purb) createCornerstones() {
 
 	recipients := purb.Recipients
 	header := purb.Header
 
 	for _, recipient := range recipients {
 
-		// create the entrypoint that will match this cornerstone
-		if len(header.EntryPoints[recipient.SuiteName]) == 0 {
-			header.EntryPoints[recipient.SuiteName] = make([]*EntryPoint, 0)
-		}
-		header.EntryPoints[recipient.SuiteName] = append(header.EntryPoints[recipient.SuiteName], newEntryPoint(recipient))
-
-		// now create the said cornerstone. We advanceIteratorUntil if we already have a cornerstone for this suite (LB->Kirill: can't two Recipients share the same suite?)
+		// now create the said cornerstone. We advance if we already have a cornerstone for this suite (LB->Kirill: can't two Recipients share the same suite?)
 		if header.Cornerstones[recipient.SuiteName] != nil {
 			continue
 		}
@@ -149,40 +129,53 @@ func (purb *Purb) createCornerstonesAndEntrypoints() {
 }
 
 // Compute a shared secret per entrypoint used to encrypt it. It takes a public PayloadKey of a recipient and multiplies it by fresh private PayloadKey for a given cipher suite.
-func (purb *Purb) computeSharedSecrets() {
+func (purb *Purb) createEntryPoints() {
 
-	// for each entrypoint in each suite
-	for suiteName, entrypoints := range purb.Header.EntryPoints {
-		for i, entrypoint := range entrypoints {
+	recipients := purb.Recipients
+	header := purb.Header
 
-			cornerstone, found := purb.Header.Cornerstones[suiteName]
-			if !found {
-				panic("no freshly generated private PayloadKey exists for this ciphersuite")
-			}
+	// create an empty entrypoint per suite, indexed per suite
+	for _, recipient := range recipients {
 
-			recipientKey := entrypoint.Recipient.PublicKey
-			senderKey := cornerstone.KeyPair.Private
-
-			sharedKey := recipientKey.Mul(senderKey, recipientKey) // Compute shared DH PayloadKey
-			if sharedKey == nil {
-				panic("couldn't negotiate a shared DH PayloadKey")
-			}
-
-			sharedBytes, err := sharedKey.MarshalBinary()
-			if err != nil {
-				panic("error" + err.Error())
-			}
-			// Derive a PayloadKey using KDF
-			purb.Header.EntryPoints[suiteName][i].SharedSecret = KDF(sharedBytes)
-
-			if purb.IsVerbose {
-				log.LLvlf3("Shared secret with suite=%v, entrypoint[%v], value %v", suiteName, i, sharedBytes)
-			}
-
-			//h.EntryPoints[suiteName][i].SharedSecret, _ = sharedKey.MarshalBinary()
-			//fmt.Printf("Shared secret: %x and length is %d\n", h.EntryPoints[suiteName][i].SharedSecret,
-			//	len(h.EntryPoints[suiteName][i].SharedSecret))
+		// fetch the cornerstone containing the freshly-generated public key for this suite
+		cornerstone, found := header.Cornerstones[recipient.SuiteName]
+		if !found {
+			panic("no freshly generated private PayloadKey exists for this ciphersuite")
 		}
+
+		// compute shared key for the entrypoint
+		recipientKey := recipient.PublicKey
+		senderKey := cornerstone.KeyPair.Private
+		sharedKey := recipientKey.Mul(senderKey, recipientKey)
+
+		if sharedKey == nil {
+			panic("couldn't negotiate a shared DH PayloadKey")
+		}
+
+		sharedBytes, err := sharedKey.MarshalBinary()
+		if err != nil {
+			panic("error" + err.Error())
+		}
+
+		// derive a PayloadKey using KDF
+		sharedSecret := KDF(sharedBytes)
+
+		if purb.IsVerbose {
+			log.LLvlf3("Shared secret with suite=%v, entrypoint value %v", recipient.SuiteName, sharedBytes)
+		}
+
+		ep := &EntryPoint{
+			Recipient:    recipient,
+			SharedSecret: sharedSecret,
+			Offset:       -1,
+		}
+
+		// store entrypoint
+		if len(header.EntryPoints[recipient.SuiteName]) == 0 {
+			header.EntryPoints[recipient.SuiteName] = make([]*EntryPoint, 0)
+		}
+
+		header.EntryPoints[recipient.SuiteName] = append(header.EntryPoints[recipient.SuiteName], ep)
 	}
 }
 
@@ -266,10 +259,7 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 
 		// ... in the cornerstone struct (which will be used when placing the entrypoints)
 		purb.Header.Cornerstones[cornerstone.SuiteName].Offset = startBit
-
-		if endBit > purb.Header.Length {
-			purb.Header.Length = endBit
-		}
+		purb.Header.Cornerstones[cornerstone.SuiteName].EndPos = endBit
 
 		if purb.IsVerbose {
 			log.LLvlf3("Found position for cornerstone %v, start %v, end %v", cornerstone.SuiteName, startBit, endBit)
@@ -309,7 +299,9 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 			var posInHashTable int
 
 			// we start with a 1-sized hash table, try to place (and break on success), otherwise it grows by 2
-			for {
+			for !positionFound {
+
+				// before doubling, consider HashTableCollisionLinearResolutionAttempts
 				for j := 0; j < purb.PublicParameters.HashTableCollisionLinearResolutionAttempts; j++ {
 					posInHashTable = (intOfHashedValue + j) % tableSize
 
@@ -327,19 +319,13 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 						break
 					}
 				}
-				if positionFound {
-					// save end of the current table as the length of the header
-					effectiveEndPos := initialStartPos + (posInHashTable+1)*purb.Header.EntryPointLength
-					if effectiveEndPos > purb.Header.Length {
-						purb.Header.Length = effectiveEndPos
-					}
-					break
-				}
 
-				//If we haven't positionFound the entrypoint, update the hash table size and initialStartPos
-				//initialStartPos = current hash table initialStartPos + number of entries in the table* the length of each entrypoint
-				initialStartPos += tableSize * purb.Header.EntryPointLength
-				tableSize *= 2
+				if !positionFound {
+					//If we haven't positionFound the entrypoint, update the hash table size and initialStartPos
+					//initialStartPos = current hash table initialStartPos + number of entries in the table* the length of each entrypoint
+					initialStartPos += tableSize * purb.Header.EntryPointLength
+					tableSize *= 2
+				}
 			}
 		}
 	}
@@ -361,9 +347,6 @@ func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
 						log.LLvlf3("Found position for entrypoint %v of suite %v, SIMPLIFIED, start %v, end %v", entryPointID, suite, startPos, endPos)
 					}
 
-					if endPos > purb.Header.Length {
-						purb.Header.Length = endPos
-					}
 					//log.Printf("Placing entry at [%d-%d]", startPos, startPos+h.EntryPointLength)
 					break
 				} else {
@@ -376,52 +359,26 @@ func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
 
 // padThenEncryptData takes plaintext data as a byte slice, pads it using PURBs padding scheme,
 // and then encrypts using AEAD encryption scheme
-func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) error {
-	var err error
-	paddedData := pad(data, purb.Header.Length+MAC_AUTHENTICATION_TAG_LENGTH)
+func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) {
+	paddedData := pad(data, purb.Header.Length()+MAC_AUTHENTICATION_TAG_LENGTH)
 
 	if purb.IsVerbose {
 		log.LLvlf3("Payload padded from %v to %v bytes", len(data), len(paddedData))
 	}
 
-	purb.Payload, err = aeadEncrypt(paddedData, purb.Nonce, purb.PayloadKey, nil, stream)
+	payload, err := aeadEncrypt(paddedData, purb.Nonce, purb.PayloadKey, nil, stream)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+	purb.Payload = payload
 
 	if purb.IsVerbose {
 		log.LLvlf3("Payload padded encrypted to %v (len %v)", purb.Payload, len(purb.Payload))
 	}
-
-	return nil
-}
-
-// Encrypt the payload of the purb using freshly generated symmetric keys and AEAD.
-func aeadEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]byte, error) {
-
-	// Generate a random 16-byte PayloadKey and create a cipher from it
-	if key == nil {
-		key := make([]byte, SYMMETRIC_KEY_LENGTH)
-		random.Bytes(key, stream)
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-
-	// Encrypt and authenticate payload
-	encrypted := aesgcm.Seal(nil, nonce, data, additional) // additional can be nil
-
-	return encrypted, nil
 }
 
 // ToBytes writes content of entrypoints and encrypted payloads into contiguous buffer
-func (purb *Purb) ToBytes() []byte {
-
+func (purb *Purb) placePayloadAndCornerstones() {
 	buffer := new(GrowableBuffer)
 
 	// copy nonce
@@ -450,26 +407,22 @@ func (purb *Purb) ToBytes() []byte {
 
 	// encrypt and copy entrypoints
 	payloadOffset := make([]byte, OFFSET_POINTER_LEN)
-	binary.BigEndian.PutUint32(payloadOffset, uint32(purb.Header.Length))
+	binary.BigEndian.PutUint32(payloadOffset, uint32(purb.Header.Length()))
 
 	entrypointContent := append(purb.PayloadKey, payloadOffset...)
 	for _, entrypointsPerSuite := range purb.Header.EntryPoints {
 		for _, entrypoint := range entrypointsPerSuite {
-			switch purb.PublicParameters.EntrypointEncryptionType {
-			case STREAM:
-				// we use shared secret as a seed to a Stream cipher
-				xof := entrypoint.Recipient.Suite.XOF(entrypoint.SharedSecret)
-				startPos := entrypoint.Offset
-				endPos := startPos + purb.Header.EntryPointLength
 
-				region := buffer.growAndGetRegion(startPos, endPos)
-				xof.XORKeyStream(region, entrypointContent)
+			// we use shared secret as a seed to a Stream cipher
+			xof := entrypoint.Recipient.Suite.XOF(entrypoint.SharedSecret)
+			startPos := entrypoint.Offset
+			endPos := startPos + purb.Header.EntryPointLength
 
-				if purb.IsVerbose {
-					log.LLvlf3("Adding entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v", startPos, endPos, entrypointContent, region, entrypoint.SharedSecret, len(entrypointContent))
-				}
-			case AEAD:
-				panic("not implemented")
+			region := buffer.growAndGetRegion(startPos, endPos)
+			xof.XORKeyStream(region, entrypointContent)
+
+			if purb.IsVerbose {
+				log.LLvlf3("Adding symmetric entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v", startPos, endPos, entrypointContent, region, entrypoint.SharedSecret, len(entrypointContent))
 			}
 		}
 	}
@@ -536,22 +489,48 @@ func (purb *Purb) ToBytes() []byte {
 		endPos := startPos + cornerstoneLength
 		buffer.copyInto(startPos, endPos, xorOfAllPositions)
 	}
-	return buffer.toBytes()
+
+	purb.byteRepresentation = buffer.toBytes()
 }
 
-func newEntryPoint(recipient Recipient) *EntryPoint {
-	return &EntryPoint{
-		Recipient:    recipient,
-		SharedSecret: make([]byte, SYMMETRIC_KEY_LENGTH),
-		Offset:       -1,
+// Encrypt using AEAD
+func aeadEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]byte, error) {
+
+	// Generate a random 16-byte PayloadKey and create a cipher from it
+	if key == nil {
+		key := make([]byte, SYMMETRIC_KEY_LENGTH)
+		random.Bytes(key, stream)
 	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	// Encrypt and authenticate payload
+	encrypted := aesgcm.Seal(nil, nonce, data, additional)
+
+	return encrypted, nil
+}
+
+// ToBytes get the []byte representation of the PURB
+func (purb *Purb) ToBytes() []byte {
+	return purb.byteRepresentation
+}
+
+func (purb *Purb) randomBytes(length int) []byte {
+	buffer := make([]byte, length)
+	random.Bytes(buffer, purb.Stream)
+	return buffer
 }
 
 func newEmptyHeader() *Header {
 	return &Header{
 		EntryPoints:      make(map[string][]*EntryPoint),
 		Cornerstones:     make(map[string]*Cornerstone),
-		Length:           0,
 		EntryPointLength: 0,
 		Layout:           NewRegionReservationStruct(),
 	}
@@ -571,4 +550,25 @@ func (si *SuiteInfo) byteRangeForAllowedPositionIndex(index int) (int, int) {
 	low := si.AllowedPositions[index]
 	high := low + si.CornerstoneLength
 	return low, high
+}
+
+// Compute the length of the header when transformed to []byte
+func (h *Header) Length() int {
+	length := AEAD_NONCE_LENGTH
+
+	for _, entryPoints := range h.EntryPoints {
+		for _, entrypoint := range entryPoints {
+			if length < entrypoint.Offset+h.EntryPointLength {
+				length = entrypoint.Offset + h.EntryPointLength
+			}
+		}
+	}
+
+	for _, cornerstone := range h.Cornerstones {
+		if length < cornerstone.EndPos {
+			length = cornerstone.EndPos
+		}
+	}
+
+	return length
 }
