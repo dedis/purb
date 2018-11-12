@@ -80,7 +80,6 @@ type Header struct {
 	EntryPoints      map[string][]*EntryPoint // map of suiteName -> []entrypoints
 	Cornerstones     map[string]*Cornerstone  // Holds sender's ephemeral private/public keys for each suite in the header
 	Layout           *RegionReservationStruct // An array of byte slices where each of the bytes slice represents a hash table entry
-	Length           int                      //
 	EntryPointLength int                      // Length of each encrypted entry point
 }
 
@@ -90,6 +89,7 @@ type Cornerstone struct {
 	SuiteName string
 	KeyPair   *key.Pair
 	Offset    int    // Starting byte position in the header
+	EndPos	  int    // Ending byte position in the header
 	Bytes     []byte // singleton. Since calling marshalling the KeyPair is non-deterministic, at least we do it only once so prints are consistents
 }
 

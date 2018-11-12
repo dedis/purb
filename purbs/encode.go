@@ -75,7 +75,6 @@ func (purb *Purb) ConstructHeader() {
 	purb.createCornerstones()
 	purb.createEntryPoints()
 
-	purb.Header.Layout.Reset()
 	orderedSuites, err := purb.placeCornerstones()
 	if err != nil {
 		panic(err)
@@ -262,10 +261,8 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 
 		// ... in the cornerstone struct (which will be used when placing the entrypoints)
 		purb.Header.Cornerstones[cornerstone.SuiteName].Offset = startBit
+		purb.Header.Cornerstones[cornerstone.SuiteName].EndPos = endBit
 
-		if endBit > purb.Header.Length {
-			purb.Header.Length = endBit
-		}
 
 		if purb.IsVerbose {
 			log.LLvlf3("Found position for cornerstone %v, start %v, end %v", cornerstone.SuiteName, startBit, endBit)
@@ -324,11 +321,6 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 					}
 				}
 				if positionFound {
-					// save end of the current table as the length of the header
-					effectiveEndPos := initialStartPos + (posInHashTable+1)*purb.Header.EntryPointLength
-					if effectiveEndPos > purb.Header.Length {
-						purb.Header.Length = effectiveEndPos
-					}
 					break
 				}
 
@@ -357,9 +349,6 @@ func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
 						log.LLvlf3("Found position for entrypoint %v of suite %v, SIMPLIFIED, start %v, end %v", entryPointID, suite, startPos, endPos)
 					}
 
-					if endPos > purb.Header.Length {
-						purb.Header.Length = endPos
-					}
 					//log.Printf("Placing entry at [%d-%d]", startPos, startPos+h.EntryPointLength)
 					break
 				} else {
@@ -374,7 +363,7 @@ func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
 // and then encrypts using AEAD encryption scheme
 func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) error {
 	var err error
-	paddedData := pad(data, purb.Header.Length+MAC_AUTHENTICATION_TAG_LENGTH)
+	paddedData := pad(data, purb.Header.Length() + MAC_AUTHENTICATION_TAG_LENGTH)
 
 	if purb.IsVerbose {
 		log.LLvlf3("Payload padded from %v to %v bytes", len(data), len(paddedData))
@@ -446,7 +435,7 @@ func (purb *Purb) ToBytes() []byte {
 
 	// encrypt and copy entrypoints
 	payloadOffset := make([]byte, OFFSET_POINTER_LEN)
-	binary.BigEndian.PutUint32(payloadOffset, uint32(purb.Header.Length))
+	binary.BigEndian.PutUint32(payloadOffset, uint32(purb.Header.Length()))
 
 	entrypointContent := append(purb.PayloadKey, payloadOffset...)
 	for _, entrypointsPerSuite := range purb.Header.EntryPoints {
@@ -545,7 +534,6 @@ func newEmptyHeader() *Header {
 	return &Header{
 		EntryPoints:      make(map[string][]*EntryPoint),
 		Cornerstones:     make(map[string]*Cornerstone),
-		Length:           0,
 		EntryPointLength: 0,
 		Layout:           NewRegionReservationStruct(),
 	}
@@ -565,4 +553,25 @@ func (si *SuiteInfo) byteRangeForAllowedPositionIndex(index int) (int, int) {
 	low := si.AllowedPositions[index]
 	high := low + si.CornerstoneLength
 	return low, high
+}
+
+// Compute the length of the header when transformed to []byte
+func (h *Header) Length() int {
+	length := AEAD_NONCE_LENGTH
+
+	for _, entryPoints := range h.EntryPoints {
+		for _, entrypoint := range entryPoints {
+			if length < entrypoint.Offset + h.EntryPointLength {
+				length = entrypoint.Offset + h.EntryPointLength
+			}
+		}
+	}
+
+	for _, cornerstone := range h.Cornerstones {
+		if length < cornerstone.EndPos {
+			length = cornerstone.EndPos
+		}
+	}
+
+	return length
 }
