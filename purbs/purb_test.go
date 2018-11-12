@@ -34,7 +34,7 @@ func TestGenCornerstones(t *testing.T) {
 		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN + MAC_AUTHENTICATION_TAG_LENGTH
 	}
 
-	purb.createCornerstonesAndEntrypoints()
+	purb.createCornerstones()
 
 	for _, stone := range purb.Header.Cornerstones {
 		require.Equal(t, stone.KeyPair.Hiding.HideLen(), CORNERSTONE_LENGTH)

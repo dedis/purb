@@ -26,26 +26,12 @@ func NewPublicFixedParameters(infoMap SuiteInfoMap, keywrap ENTRYPOINT_ENCRYPTIO
 // Creates a PURB from some data and Recipients information
 func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *PurbPublicFixedParameters, verbose bool) (*Purb, error) {
 
-	// generate payload PayloadKey and global nonce. It could be passed by an application above
-	key := make([]byte, SYMMETRIC_KEY_LENGTH)
-	nonce := make([]byte, AEAD_NONCE_LENGTH)
-	random.Bytes(key, stream)
-	random.Bytes(nonce, stream)
-
-	// some sanity check
-	if len(nonce) != AEAD_NONCE_LENGTH {
-		return nil, errors.New("incorrect nonce size")
-	}
-	if len(key) != SYMMETRIC_KEY_LENGTH {
-		return nil, errors.New("incorrect symmetric PayloadKey size")
-	}
-
 	// create the PURB datastructure
 	purb := &Purb{
-		Nonce:            nonce,
+		Nonce:            nil,
 		Header:           nil,
 		Payload:          nil,
-		PayloadKey:       key,
+		PayloadKey:       nil,
 		Recipients:       recipients,
 		Stream:           stream,
 		OriginalData:     data, // just for statistics
@@ -53,8 +39,11 @@ func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *P
 		IsVerbose:        verbose,
 	}
 
+	purb.Nonce = purb.randomBytes(AEAD_NONCE_LENGTH)
+	purb.PayloadKey = purb.randomBytes(SYMMETRIC_KEY_LENGTH)
+
 	if purb.IsVerbose {
-		log.LLvlf3("Created an empty PURB, original data %v, payload key %v, nonce %v", data, key, nonce)
+		log.LLvlf3("Created an empty PURB, original data %v, payload key %v, nonce %v", data, purb.PayloadKey, purb.Nonce)
 		log.LLvlf3("Recipients %+v", recipients)
 		for i := range purb.PublicParameters.SuiteInfoMap {
 			log.LLvlf3("SuiteInfoMap [%v]: len %v, positions %+v", i, purb.PublicParameters.SuiteInfoMap[i].CornerstoneLength, purb.PublicParameters.SuiteInfoMap[i].AllowedPositions)
@@ -83,8 +72,8 @@ func (purb *Purb) ConstructHeader() {
 		purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN + MAC_AUTHENTICATION_TAG_LENGTH
 	}
 
-	purb.createCornerstonesAndEntrypoints()
-	purb.computeSharedSecrets()
+	purb.createCornerstones()
+	purb.createEntryPoints()
 
 	purb.Header.Layout.Reset()
 	orderedSuites, err := purb.placeCornerstones()
@@ -100,20 +89,14 @@ func (purb *Purb) ConstructHeader() {
 }
 
 // Find what unique suites used by the Recipients, generate a private for each of these suites, and assign them to corresponding entry points
-func (purb *Purb) createCornerstonesAndEntrypoints() {
+func (purb *Purb) createCornerstones() {
 
 	recipients := purb.Recipients
 	header := purb.Header
 
 	for _, recipient := range recipients {
 
-		// create the entrypoint that will match this cornerstone
-		if len(header.EntryPoints[recipient.SuiteName]) == 0 {
-			header.EntryPoints[recipient.SuiteName] = make([]*EntryPoint, 0)
-		}
-		header.EntryPoints[recipient.SuiteName] = append(header.EntryPoints[recipient.SuiteName], newEntryPoint(recipient))
-
-		// now create the said cornerstone. We advanceIteratorUntil if we already have a cornerstone for this suite (LB->Kirill: can't two Recipients share the same suite?)
+		// now create the said cornerstone. We advance if we already have a cornerstone for this suite (LB->Kirill: can't two Recipients share the same suite?)
 		if header.Cornerstones[recipient.SuiteName] != nil {
 			continue
 		}
@@ -149,40 +132,53 @@ func (purb *Purb) createCornerstonesAndEntrypoints() {
 }
 
 // Compute a shared secret per entrypoint used to encrypt it. It takes a public PayloadKey of a recipient and multiplies it by fresh private PayloadKey for a given cipher suite.
-func (purb *Purb) computeSharedSecrets() {
+func (purb *Purb) createEntryPoints() {
 
-	// for each entrypoint in each suite
-	for suiteName, entrypoints := range purb.Header.EntryPoints {
-		for i, entrypoint := range entrypoints {
+	recipients := purb.Recipients
+	header := purb.Header
 
-			cornerstone, found := purb.Header.Cornerstones[suiteName]
-			if !found {
-				panic("no freshly generated private PayloadKey exists for this ciphersuite")
-			}
+	// create an empty entrypoint per suite, indexed per suite
+	for _, recipient := range recipients {
 
-			recipientKey := entrypoint.Recipient.PublicKey
-			senderKey := cornerstone.KeyPair.Private
-
-			sharedKey := recipientKey.Mul(senderKey, recipientKey) // Compute shared DH PayloadKey
-			if sharedKey == nil {
-				panic("couldn't negotiate a shared DH PayloadKey")
-			}
-
-			sharedBytes, err := sharedKey.MarshalBinary()
-			if err != nil {
-				panic("error" + err.Error())
-			}
-			// Derive a PayloadKey using KDF
-			purb.Header.EntryPoints[suiteName][i].SharedSecret = KDF(sharedBytes)
-
-			if purb.IsVerbose {
-				log.LLvlf3("Shared secret with suite=%v, entrypoint[%v], value %v", suiteName, i, sharedBytes)
-			}
-
-			//h.EntryPoints[suiteName][i].SharedSecret, _ = sharedKey.MarshalBinary()
-			//fmt.Printf("Shared secret: %x and length is %d\n", h.EntryPoints[suiteName][i].SharedSecret,
-			//	len(h.EntryPoints[suiteName][i].SharedSecret))
+		// fetch the cornerstone containing the freshly-generated public key for this suite
+		cornerstone, found := header.Cornerstones[recipient.SuiteName]
+		if !found {
+			panic("no freshly generated private PayloadKey exists for this ciphersuite")
 		}
+
+		// compute shared key for the entrypoint
+		recipientKey := recipient.PublicKey
+		senderKey := cornerstone.KeyPair.Private
+		sharedKey := recipientKey.Mul(senderKey, recipientKey)
+
+		if sharedKey == nil {
+			panic("couldn't negotiate a shared DH PayloadKey")
+		}
+
+		sharedBytes, err := sharedKey.MarshalBinary()
+		if err != nil {
+			panic("error" + err.Error())
+		}
+
+		// derive a PayloadKey using KDF
+		sharedSecret := KDF(sharedBytes)
+
+		if purb.IsVerbose {
+			log.LLvlf3("Shared secret with suite=%v, entrypoint value %v", recipient.SuiteName, sharedBytes)
+		}
+
+		ep := &EntryPoint{
+			Recipient:    recipient,
+			SharedSecret: sharedSecret,
+			Offset:       -1,
+		}
+
+		// store entrypoint
+		if len(header.EntryPoints[recipient.SuiteName]) == 0 {
+			header.EntryPoints[recipient.SuiteName] = make([]*EntryPoint, 0)
+		}
+
+		header.EntryPoints[recipient.SuiteName] = append(header.EntryPoints[recipient.SuiteName], ep)
 	}
 }
 
@@ -539,12 +535,10 @@ func (purb *Purb) ToBytes() []byte {
 	return buffer.toBytes()
 }
 
-func newEntryPoint(recipient Recipient) *EntryPoint {
-	return &EntryPoint{
-		Recipient:    recipient,
-		SharedSecret: make([]byte, SYMMETRIC_KEY_LENGTH),
-		Offset:       -1,
-	}
+func (purb *Purb) randomBytes(length int) []byte {
+	buffer := make([]byte, length)
+	random.Bytes(buffer, purb.Stream)
+	return buffer
 }
 
 func newEmptyHeader() *Header {
