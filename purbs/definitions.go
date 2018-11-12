@@ -43,6 +43,8 @@ type Purb struct {
 	Recipients []Recipient   // tuple with (Suite, PublicKey, PrivateKey)
 	Stream     cipher.Stream // Used to get randomness
 
+	byteRepresentation []byte // the end-to-end random-looking bit array returned by ToBytes() is computed at creation time
+
 	OriginalData []byte // Kept to compare between "Payload" and this
 	IsVerbose    bool   // If true, the various operations on the data structure will print what is happening
 }

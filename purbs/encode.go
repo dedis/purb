@@ -39,6 +39,7 @@ func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *P
 		IsVerbose:        verbose,
 	}
 
+	// creation of the global Nonce and random playload key
 	purb.Nonce = purb.randomBytes(AEAD_NONCE_LENGTH)
 	purb.PayloadKey = purb.randomBytes(SYMMETRIC_KEY_LENGTH)
 
@@ -50,16 +51,20 @@ func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *P
 		}
 	}
 
-	purb.ConstructHeader()
+	// creation of the entrypoints and cornerstones, places entrypoint and cornerstones
+	purb.CreateHeader()
+
+	// creation of the encrypted payload
 	purb.padThenEncryptData(data, stream)
 
-	// Here, things are placed where they should; only the final XORing step for entrypoint needs to be done (in "ToBytes")
+	// converts everything to []byte, performs the XOR trick on the cornerstones
+	purb.placePayloadAndCornerstones()
 
 	return purb, nil
 }
 
-// Construct header finds an appropriate placements for the Entrypoints and the Cornerstones
-func (purb *Purb) ConstructHeader() {
+// Construct header computes and finds an appropriate placements for the Entrypoints and the Cornerstones
+func (purb *Purb) CreateHeader() {
 
 	purb.Header = newEmptyHeader()
 	switch purb.PublicParameters.EntrypointEncryptionType {
@@ -377,32 +382,10 @@ func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) {
 	}
 }
 
-// Encrypt the payload of the purb using freshly generated symmetric keys and AEAD.
-func aeadEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]byte, error) {
 
-	// Generate a random 16-byte PayloadKey and create a cipher from it
-	if key == nil {
-		key := make([]byte, SYMMETRIC_KEY_LENGTH)
-		random.Bytes(key, stream)
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-
-	// Encrypt and authenticate payload
-	encrypted := aesgcm.Seal(nil, nonce, data, additional) // additional can be nil
-
-	return encrypted, nil
-}
 
 // ToBytes writes content of entrypoints and encrypted payloads into contiguous buffer
-func (purb *Purb) ToBytes() []byte {
-
+func (purb *Purb) placePayloadAndCornerstones() {
 	buffer := new(GrowableBuffer)
 
 	// copy nonce
@@ -517,7 +500,36 @@ func (purb *Purb) ToBytes() []byte {
 		endPos := startPos + cornerstoneLength
 		buffer.copyInto(startPos, endPos, xorOfAllPositions)
 	}
-	return buffer.toBytes()
+
+	purb.byteRepresentation = buffer.toBytes()
+}
+
+// Encrypt the payload of the purb using freshly generated symmetric keys and AEAD.
+func aeadEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]byte, error) {
+
+	// Generate a random 16-byte PayloadKey and create a cipher from it
+	if key == nil {
+		key := make([]byte, SYMMETRIC_KEY_LENGTH)
+		random.Bytes(key, stream)
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	// Encrypt and authenticate payload
+	encrypted := aesgcm.Seal(nil, nonce, data, additional) // additional can be nil
+
+	return encrypted, nil
+}
+
+// ToBytes get the []byte representation of the PURB
+func (purb *Purb) ToBytes() []byte {
+	return purb.byteRepresentation
 }
 
 func (purb *Purb) randomBytes(length int) []byte {
