@@ -118,7 +118,7 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 					log.LLvlf3("  yield %v", decrypted)
 				}
 
-				found, errorReason, message := verifyDecryption(decrypted, data)
+				found, errorReason, message := entrypointTrialDecrypt(decrypted, data)
 
 				if verbose {
 					log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
@@ -145,11 +145,11 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 	return false, nil, errors.New("no entrypoint was correctly decrypted")
 }
 
-func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, symmKeyWrapType ENTRYPOINT_ENCRYPTION_TYPE, verbose bool) (bool, []byte, error) {
+func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, entrypointEncryptionType ENTRYPOINT_ENCRYPTION_TYPE, verbose bool) (bool, []byte, error) {
 	startPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
 	var entrypointLength int
-	switch symmKeyWrapType {
+	switch entrypointEncryptionType {
 	case STREAM:
 		entrypointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
 	case AEAD:
@@ -157,12 +157,13 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 	}
 
 	for startPos+entrypointLength < len(data) {
-		switch symmKeyWrapType {
+		entrypointBytes := data[startPos:startPos+entrypointLength]
+		switch entrypointEncryptionType {
 		case STREAM:
 			xof := recipient.Suite.XOF(sharedSecret)
 			decrypted := make([]byte, entrypointLength)
-			xof.XORKeyStream(decrypted, data[startPos:startPos+entrypointLength])
-			found, errorReason, message := verifyDecryption(decrypted, data)
+			xof.XORKeyStream(decrypted, entrypointBytes)
+			found, errorReason, message := entrypointTrialDecrypt(decrypted, data)
 
 			if verbose {
 				log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
@@ -171,7 +172,23 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 				return found, message, nil
 			}
 		case AEAD:
-			panic("not implemented")
+			// we use shared secret as a seed to a Stream cipher
+
+			nonce := data[:AEAD_NONCE_LENGTH]
+			decrypted, err := aeadDecrypt(entrypointBytes, nonce, sharedSecret, nil)
+
+			if err != nil && verbose {
+				log.LLvlf3("  AEAD error, skipping")
+			}
+
+			found, errorReason, message := entrypointTrialDecrypt(decrypted, data)
+
+			if verbose {
+				log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
+			}
+			if found {
+				return found, message, nil
+			}
 		}
 		startPos += entrypointLength
 	}
@@ -179,7 +196,7 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 	return false, nil, errors.New("no entrypoint was correctly decrypted")
 }
 
-func verifyDecryption(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {
+func entrypointTrialDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {
 
 	// verify pointer to payload
 	msgStartBytes := entrypoint[SYMMETRIC_KEY_LENGTH : SYMMETRIC_KEY_LENGTH+OFFSET_POINTER_LEN]
@@ -191,20 +208,10 @@ func verifyDecryption(entrypoint []byte, fullPURBBlob []byte) (bool, string, []b
 
 	// compute PayloadKey from entrypoint, create the decoder
 	key := entrypoint[:SYMMETRIC_KEY_LENGTH]
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
-	// try decoding the payload
 	payload := fullPURBBlob[msgStart:]
-	aeadNonce := fullPURBBlob[:AEAD_NONCE_LENGTH]
+	nonce := fullPURBBlob[:AEAD_NONCE_LENGTH]
 
-	msg, err := aesgcm.Open(nil, aeadNonce, payload, nil)
+	msg, err := aeadDecrypt(payload, nonce, key, nil)
 	if err != nil {
 		return false, "aead opening error", nil
 	}
@@ -214,4 +221,23 @@ func verifyDecryption(entrypoint []byte, fullPURBBlob []byte) (bool, string, []b
 	}
 
 	return true, "", msg
+}
+
+
+// Decrypt using AEAD
+func aeadDecrypt(ciphertext, nonce, key, additional []byte) ([]byte, error) {
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	// Encrypt and authenticate payload
+	decrypted, err := aesgcm.Open(nil, nonce, ciphertext, additional)
+
+	return decrypted, err
 }

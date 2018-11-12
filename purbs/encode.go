@@ -430,10 +430,29 @@ func (purb *Purb) placePayloadAndCornerstones() {
 				xof.XORKeyStream(region, entrypointContent)
 
 				if purb.IsVerbose {
-					log.LLvlf3("Adding entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v", startPos, endPos, entrypointContent, region, entrypoint.SharedSecret, len(entrypointContent))
+					log.LLvlf3("Adding symmetric entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v", startPos, endPos, entrypointContent, region, entrypoint.SharedSecret, len(entrypointContent))
 				}
 			case AEAD:
-				panic("not implemented")
+				// we use shared secret as a seed to a Stream cipher
+				cipher, err := aeadEncrypt(entrypointContent, purb.Nonce, entrypoint.SharedSecret, nil, purb.Stream)
+
+				if err != nil {
+					log.Fatal("Could not AEAD-encrypt the entrypoint")
+				}
+
+				if len(cipher) != purb.Header.EntryPointLength {
+					log.Fatal("AEAD-Entrypoint length", len(cipher), "but", purb.Header.EntryPointLength, "expected")
+				}
+
+				startPos := entrypoint.Offset
+				endPos := startPos + purb.Header.EntryPointLength
+
+				region := buffer.growAndGetRegion(startPos, endPos)
+				copy(region, cipher)
+
+				if purb.IsVerbose {
+					log.LLvlf3("Adding AEAD entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v", startPos, endPos, entrypointContent, region, entrypoint.SharedSecret, len(entrypointContent))
+				}
 			}
 		}
 	}
@@ -504,7 +523,7 @@ func (purb *Purb) placePayloadAndCornerstones() {
 	purb.byteRepresentation = buffer.toBytes()
 }
 
-// Encrypt the payload of the purb using freshly generated symmetric keys and AEAD.
+// Encrypt using AEAD
 func aeadEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]byte, error) {
 
 	// Generate a random 16-byte PayloadKey and create a cipher from it
@@ -522,7 +541,7 @@ func aeadEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]b
 	}
 
 	// Encrypt and authenticate payload
-	encrypted := aesgcm.Seal(nil, nonce, data, additional) // additional can be nil
+	encrypted := aesgcm.Seal(nil, nonce, data, additional)
 
 	return encrypted, nil
 }
