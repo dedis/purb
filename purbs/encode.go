@@ -51,11 +51,7 @@ func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *P
 	}
 
 	purb.ConstructHeader()
-
-	err := purb.padThenEncryptData(data, stream)
-	if err != nil {
-		return nil, err
-	}
+	purb.padThenEncryptData(data, stream)
 
 	// Here, things are placed where they should; only the final XORing step for entrypoint needs to be done (in "ToBytes")
 
@@ -363,24 +359,22 @@ func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
 
 // padThenEncryptData takes plaintext data as a byte slice, pads it using PURBs padding scheme,
 // and then encrypts using AEAD encryption scheme
-func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) error {
-	var err error
+func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) {
 	paddedData := pad(data, purb.Header.Length() + MAC_AUTHENTICATION_TAG_LENGTH)
 
 	if purb.IsVerbose {
 		log.LLvlf3("Payload padded from %v to %v bytes", len(data), len(paddedData))
 	}
 
-	purb.Payload, err = aeadEncrypt(paddedData, purb.Nonce, purb.PayloadKey, nil, stream)
+	payload, err := aeadEncrypt(paddedData, purb.Nonce, purb.PayloadKey, nil, stream)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+	purb.Payload = payload
 
 	if purb.IsVerbose {
 		log.LLvlf3("Payload padded encrypted to %v (len %v)", purb.Payload, len(purb.Payload))
 	}
-
-	return nil
 }
 
 // Encrypt the payload of the purb using freshly generated symmetric keys and AEAD.
