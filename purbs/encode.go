@@ -52,7 +52,8 @@ func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *P
 
 	purb.ConstructHeader()
 
-	if err := purb.padThenEncryptData(data, stream); err != nil {
+	err := purb.padThenEncryptData(data, stream)
+	if err != nil {
 		return nil, err
 	}
 
@@ -302,7 +303,9 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 			var posInHashTable int
 
 			// we start with a 1-sized hash table, try to place (and break on success), otherwise it grows by 2
-			for {
+			for !positionFound {
+
+				// before doubling, consider HashTableCollisionLinearResolutionAttempts
 				for j := 0; j < purb.PublicParameters.HashTableCollisionLinearResolutionAttempts; j++ {
 					posInHashTable = (intOfHashedValue + j) % tableSize
 
@@ -320,14 +323,13 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 						break
 					}
 				}
-				if positionFound {
-					break
-				}
 
-				//If we haven't positionFound the entrypoint, update the hash table size and initialStartPos
-				//initialStartPos = current hash table initialStartPos + number of entries in the table* the length of each entrypoint
-				initialStartPos += tableSize * purb.Header.EntryPointLength
-				tableSize *= 2
+				if !positionFound {
+					//If we haven't positionFound the entrypoint, update the hash table size and initialStartPos
+					//initialStartPos = current hash table initialStartPos + number of entries in the table* the length of each entrypoint
+					initialStartPos += tableSize * purb.Header.EntryPointLength
+					tableSize *= 2
+				}
 			}
 		}
 	}

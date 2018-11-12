@@ -6,4 +6,4 @@ test:
 	cd pgp && go test -v -race *
 
 simul:
-	go run -tags=vartime simulation.go
+	go run -tags=vartime *.go
