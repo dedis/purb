@@ -4,7 +4,7 @@ install:
 	go get -u -tags=vartime -v ./...
 
 example:
-	go run -tags=vartime example.go
+	go run -tags=vartime example/example.go
 
 demo: example
 
@@ -12,7 +12,7 @@ test:
 	$(MAKE) -C purbs test
 
 simul:
-	go run -tags=vartime simul.go
+	go run -tags=vartime simulation/simul.go
 
 padme-figures:
 	$(MAKE) -C experiments-padding all
