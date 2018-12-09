@@ -12,7 +12,7 @@ test:
 	$(MAKE) -C purbs test
 
 simul:
-	go run -tags=vartime simulation/simul.go
+	$(MAKE) -C experiments-encoding all
 
 padme-figures:
 	$(MAKE) -C experiments-padding all
