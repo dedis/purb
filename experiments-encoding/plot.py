@@ -7,137 +7,31 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 import sys
+from utils import *
 
-colorbar = ['#EBEBEB', '#FFE5CC', '#CCE5FF']
-# colorbar = ['#EBEBEB', "#c2c2ff", "#C5E1C5", "#fffaca", "#ffc2c2", "#9EFFE3"]
-colorlog = ['#E2DC27', '#071784', '#077C0F', '#BC220A']
-hatches = ['', '//', '.']
+color = ['#0000FF', '#FF0000', '#800080', '#1E90FF', '#8A2BE2', '#FFA500', '#00FF00', '#F0F0F0']
+markers = ['D', 'x', 'o', 'd']
+linestyles = ['--', ':', '-', '-.']
+patterns = ['', '//', '.']
 
-def arr_sum(data):
-    acc = 0.0
-    for x in data:
-        acc += x
-    return acc
-
-def mean(data):
-    return round(100*float(arr_sum(data))/len(data))/100
-
-def percentile(data):
-    if len(data) == 0:
-        return 0;
-    mean_value = mean(data)
-    deviations = []
-
-    for x in data:
-        deviations.append((x-mean_value)**2)
-
-    std = mean(deviations)
-    sterr = sqrt(std)
-    z_value_95 = 1.96
-    margin_error = sterr * z_value_95
-    return round(100*margin_error)/100
-
-def mean_and_deviation(elems):
-    a = np.array(elems)
-    a = a.astype(np.float)
-    dev = a.std()
-    devs = enumerate([abs(elem - dev) for elem in a])
-    outlier = max(devs, key=lambda k: k[1])
-    a = np.delete(a, outlier[0])
-    dev = a.std()
-    mean = a.mean()
-    return mean, dev
-
-def stats(data):
-    s = {}
-    s['mean'] = mean(data)
-    s['err'] = percentile(data)
-    s['min'] = min(data)
-    s['max'] = max(data)
-    s['count'] = len(data)
-    a =mean_and_deviation(data)
-    s['mean2'] = a[0]
-    s['err2'] = a[1]
-    return s
-
-def process(data):
-    # remove non-data
-    data2 = []
-    for line in data:
-        line2 = {}
-        for key in line:
-            if line[key] != "-1" and line[key] != -1:
-                if key == "value":
-                    line2[key] = float(line[key])
-                else:
-                    line2[key] = int(line[key])
-        data2.append(line2)
-
-    return data2
-
-
-def readAndProcess(file):
-    data = []
-    with open(file) as f:
-        data = json.load(f)
-    return process(data)
-
-def readAndProcess2(file):
-    data = []
-    with open(file) as f:
-        data = json.load(f)
-
-    data2 = {}
-    for data_type in data:
-        data2[data_type] = process(data[data_type])
-
-    return data2
-
-def groupByNSuites(data):
-    grouped_per_suite = {}
-    for line in data:
-        n_suite = line['nSuites']
-        if n_suite not in grouped_per_suite:
-            grouped_per_suite[n_suite] = []
-        grouped_per_suite[n_suite].append(line)
-
-    return grouped_per_suite
-
-def groupByNRecipientsAndGetStats(data):
-    grouped_per_recipients = {}
-    for line in data:
-        n_recipients = line['nRecipients']
-        if n_recipients not in grouped_per_recipients:
-            grouped_per_recipients[n_recipients] = []
-        grouped_per_recipients[n_recipients].append(line)
-
-    results = {}
-    for group in grouped_per_recipients:
-        values = [x['value'] for x in grouped_per_recipients[group]]
-        results[group] = stats(values)
-    return results
-
-# plotting settings
 mpl.rcParams['text.latex.preamble'] = [r'\usepackage{sansmath}', r'\sansmath']
-# mpl.rcParams['font.family'] = 'sans-serif'  # ... for regular text
 mpl.rcParams['text.usetex'] = True
-# mpl.rcParams['font.sans-serif'] = 'Computer Modern Sans serif'
 mpl.rcParams.update({'font.size': 16})
 
 def plotHeaderSize():
     header_sizes = readAndProcess('header_sizes.json')
-    v = groupByNRecipientsAndGetStats(header_sizes)
+    v = groupByKeyAndGetStats(header_sizes, key="nRecipients")
+
     Xs = [x for x in v]
     Ys = [v[x]['mean2'] for x in v]
+    Yerr = [v[x]['err2'] for x in v]
 
-    plt.plot(Xs, Ys, color='#0000FF', label='Header Size', marker='d')
-    #plt.fill_between(Xs, Ys, facecolor='#FFFDCD')
+    plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[0], label='Header Size', marker=markers[0], linestyle=linestyle[0],capsize=2)
 
     plt.tick_params(axis='x', labelsize=16)
     plt.tick_params(axis='y', labelsize=16)
-    #plt.xlim(1, 4000)
     plt.legend()
-    plt.ylabel('Header Size, bytes')
+    plt.ylabel('Header Size [B]')
     plt.xlabel('Number of Recipients')
     plt.grid(True, which="major", axis='both')
     plt.axis()
@@ -146,41 +40,144 @@ def plotHeaderSize():
 
 def plotDecodeTime():
     decode = readAndProcess('decode.json')
-    v = groupByNRecipientsAndGetStats(decode)
+    v = groupByKeyAndGetStats(decode, key="totalNRecipients")
+
     Xs = [x for x in v]
     Ys = [v[x]['mean2'] for x in v]
+    Yerr = [v[x]['err2'] for x in v]
 
-    plt.plot(Xs, Ys, color='#0000FF', label='PURB', marker='d')
-    #plt.fill_between(Xs, Ys, facecolor='#FFFDCD')
+    plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[0], label='PURB', marker=markers[0], linestyle=linestyle[0],capsize=2)
 
     decode = readAndProcess('decode_pgp.json')
-    v = groupByNRecipientsAndGetStats(decode)
+    v = groupByKeyAndGetStats(decode, key="totalNRecipients")
     Xs = [x for x in v]
     Ys = [v[x]['mean2'] for x in v]
+    Yerr = [v[x]['err2'] for x in v]
 
-    plt.plot(Xs, Ys, color='#0000FF', label='PGP', marker='d')
-    #plt.fill_between(Xs, Ys, facecolor='#FFFDCD')
+    plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[1], label='PGP', marker=markers[1], linestyle=linestyle[1],capsize=2)
 
     plt.tick_params(axis='x', labelsize=16)
     plt.tick_params(axis='y', labelsize=16)
-    #plt.xlim(1, 4000)
+
     plt.legend()
-    plt.ylabel('Mean time to decode')
+    plt.ylabel('Decoding time [ms]')
     plt.xlabel('Number of Recipients')
     plt.grid(True, which="major", axis='both')
     plt.axis()
     plt.show()
 
-# do the plotting
+def plotEncodingTime():
+    encode = readAndProcess2('encode.json')
 
-encode = readAndProcess2('encode.json')
-for encode_type in encode:
-    data = encode[encode_type]
-    grouped_by_suite = groupByNSuites(data)
-    grouped_by_suite_processed = {}
-    for s in grouped_by_suite:
-        data2 = grouped_by_suite[s]
-        data3 = groupByNRecipientsAndGetStats(data2)
-        grouped_by_suite_processed[s] = data3
+    labels = {}
+    labels['pgp'] = 'PGP'
+    labels['pgp-hidden'] = 'PGP Hidden'
+    labels['purb-flat'] = 'PURBs (no GHT)'
+    labels['purb'] = 'PURBs'
 
-plotDecodeTime()
+    i = 0
+    for encode_type in encode:
+        data = encode[encode_type]
+
+        # take only the data for 3 suites
+        data_filtered = []
+        for row in data:
+            if row['nSuites'] == 3:
+                data_filtered.append(row)
+
+        v = groupByKeyAndGetStats(data_filtered, key="nRecipients")
+        
+        Xs = [x for x in v]
+        Ys = [v[x]['mean2'] for x in v]
+        Yerr = [v[x]['err2'] for x in v]
+
+        plt.errorbar(Xs, Ys, yerr=Yerr, color=color[i], label=labels[encode_type], marker=markers[i], linestyle=linestyles[i],capsize=2)
+        i += 1
+
+    plt.tick_params(axis='x', labelsize=16)
+    plt.tick_params(axis='y', labelsize=16)
+
+    plt.legend()
+    plt.ylabel('Encoding time [ms]')
+    plt.xlabel('Number of Recipients')
+    plt.grid(True, which="major", axis='both')
+    plt.axis()
+    plt.show()
+
+def plotEncodingPrecise():
+    encode = readAndProcess2('encode_precise.json')
+
+    labels = {}
+    labels['pgp'] = 'PGP'
+    labels['pgp-hidden'] = 'PGP Hidden'
+    labels['purb-flat'] = 'PURBs (no GHT)'
+    labels['purb'] = 'PURBs'
+    width = 0.8
+
+    nRecipients = []
+    nSuites = []
+    for row in encode['asym-crypto']:
+        if row['nRecipients'] not in nRecipients:
+            nRecipients.append(row['nRecipients'])
+        if row['nSuites'] not in nSuites:
+            nSuites.append(row['nSuites'])
+
+
+    data_type_counter = 0
+    for encode_type in encode:
+        data = encode[encode_type]
+
+        grouped_by_suite = groupByKey(data, "nSuites")
+
+        suite_counter = 0
+        for nsuite in grouped_by_suite:
+            data2 = grouped_by_suite[nsuite]
+            data3 = groupByKeyAndGetStats(data2, key="nRecipients")
+
+            Xs = [((len(nRecipients) + 1) * x) + suite_counter for x in np.arange(len(data3))]
+            Ys = [data3[x]['mean2'] for x in data3]
+            Yerr = [data3[x]['err2'] for x in data3]
+
+            plt.bar(Xs, Ys, width, color=color[data_type_counter], edgecolor='black', label='xxx', hatch=patterns[suite_counter])
+            suite_counter += 1
+
+        data_type_counter += 1
+
+    ticks = []
+    ticks_positions = []
+    i = 0
+    while i<len(nRecipients):
+        j = 0
+        while j<len(nSuites):
+            ticks_positions.append((i * len(nRecipients))+ j + i)
+            ticks.append(nRecipients[i])
+            j += 1
+        i += 1
+
+    print(ticks_positions)
+    print(ticks)
+
+    plt.xticks(ticks_positions, ticks)
+    plt.ylabel('CPU time, ms')
+    plt.xlabel('Number of Recipients')
+    plt.yscale('log')
+    plt.grid(True, which="major", axis='y')
+
+    legends = []
+    i = 0
+    while i < len(nSuites):
+        dataserie = mpatches.Patch(facecolor='white', edgecolor='black', hatch=patterns[i], label=str(nSuites[i]) + ' suite')
+        legends.append(dataserie)
+        i += 1
+
+    i = 0
+    for encode_type in encode:
+        dataserie = mpatches.Patch(facecolor=color[i], edgecolor='black', label=encode_type)
+        legends.append(dataserie)
+        i += 1
+
+    plt.legend(handles=legends, ncol=2, fontsize=13,labelspacing=0.2, columnspacing=1)
+
+    plt.show()
+
+plotEncodingPrecise()

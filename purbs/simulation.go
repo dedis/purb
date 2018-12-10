@@ -18,6 +18,111 @@ const simulationIsVerbose = false
 const simulationUsesSimplifiedLayout = false
 
 
+// SimulMeasureEncodingTimePrecise
+func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int) string {
+	l := log.New(os.Stderr, "", 0)
+
+	msg := simulGetRandomBytes(100)
+
+	resultsAsymCrypto := new(Results)
+	resultsEPGen := new(Results)
+	resultsCSPlace := new(Results)
+	resultsEPPlace := new(Results)
+	resultsPayload := new(Results)
+	resultsXOR := new(Results)
+	resultsMapToBytes := new(Results)
+
+	m := newMonitor()
+	for _, nSuites := range suites {
+		for _, nRecipients := range recipients {
+			for k := 0; k < nRepeat; k++ {
+				l.Println("Simulating for", nRecipients, "recipients,", nSuites, "suites,", k, "/", nRepeat)
+
+				si := createMultiInfo(nSuites)
+				recipients := createDecoders(nRecipients)
+				publicFixedParams := NewPublicFixedParameters(si, false)
+
+
+				// a bit ugly, but we have to copy-paste code here (or make everything public in the PURB folder)
+				purb := &Purb{
+					Nonce:            nil,
+					Header:           nil,
+					Payload:          nil,
+					PayloadKey:       nil,
+					Recipients:       recipients,
+					Stream:           random.New(),
+					OriginalData:     msg, // just for statistics
+					PublicParameters: publicFixedParams,
+					IsVerbose:        simulationIsVerbose,
+				}
+				purb.Nonce = purb.randomBytes(AEAD_NONCE_LENGTH)
+				purb.PayloadKey = purb.randomBytes(SYMMETRIC_KEY_LENGTH)
+
+				// creation of the entrypoints and cornerstones, places entrypoint and cornerstones
+				purb.Header = newEmptyHeader()
+
+				// entrypoints contain the symm key to the payload, and a pointer
+				purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
+
+				m.reset()
+				purb.createCornerstones()
+				resultsAsymCrypto.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
+				purb.createEntryPoints()
+				resultsEPGen.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
+
+				orderedSuites, err := purb.placeCornerstones()
+				if err != nil {
+					panic(err)
+				}
+				resultsCSPlace.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
+
+				if purb.PublicParameters.SimplifiedEntrypointsPlacement {
+					purb.placeEntrypointsSimplified(orderedSuites)
+				} else {
+					purb.placeEntrypoints(orderedSuites)
+				}
+				resultsEPPlace.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
+
+				// creation of the encrypted payload
+				purb.padThenEncryptData(msg, purb.Stream)
+
+				resultsPayload.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
+				// converts everything to []byte, performs the XOR trick on the cornerstones
+
+				purb.placePayloadAndCornerstones()
+
+				resultsXOR.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
+
+				blob := purb.ToBytes()
+				resultsMapToBytes.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.record())
+
+				if err != nil {
+					panic(err.Error())
+				}
+
+				success, out, err := Decode(blob, &recipients[0], publicFixedParams, simulationIsVerbose)
+				if !success || !bytes.Equal(out, msg) {
+					panic("PURBs did not decrypt correctly")
+				}
+				if err != nil {
+					panic(err.Error())
+				}
+			}
+		}
+	}
+
+	s := "{"
+	s += "\"asym-crypto\": " + resultsAsymCrypto.String()+","
+	s += "\"EP-gen\": " + resultsEPGen.String()+","
+	s += "\"CS-place\": " + resultsCSPlace.String()+","
+	s += "\"EP-place\": " + resultsEPPlace.String()+","
+	s += "\"payload\": " + resultsPayload.String()+","
+	s += "\"cs-ep-xor\": " + resultsXOR.String()+","
+	s += "\"byte-map\": " + resultsMapToBytes.String()
+	s += "}"
+
+	return s
+}
 
 // SimulMeasureNumRecipients
 func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) string {

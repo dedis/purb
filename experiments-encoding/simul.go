@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"os"
 	"log"
+	"strings"
+	"strconv"
 )
 
-const REPEAT = 2
+const REPEAT = 10
 const PAYLOAD_SIZE = 100
+const RECIPIENTS_STR = "1,3,10,30,100,300,1000,3000"
+const SUITES_STR = "1,3,10"
 
 func main() {
 	app := cli.NewApp()
@@ -36,6 +40,11 @@ func main() {
 			Aliases: []string{"h"},
 			Action:  headerSize,
 		},
+		{
+			Name: "encode-precise",
+			Aliases: []string{"p"},
+			Action: encodingPrecise,
+		},
 	}
 	app.Run(os.Args)
 }
@@ -43,8 +52,8 @@ func main() {
 func encoding(c *cli.Context) {
 	l := log.New(os.Stderr, "", 0)
 
-	recipients := []int{1,3,10,30}//,100,300,1000,3000}
-	suites := []int{1,3,10}
+	recipients := toIntArray(RECIPIENTS_STR)
+	suites := toIntArray(SUITES_STR)
 
 	l.Println("-------------------------------------------------------")
 	l.Println("Computing Encoding times for various number of recipients/suites")
@@ -52,10 +61,22 @@ func encoding(c *cli.Context) {
 	fmt.Println(out)
 }
 
+func encodingPrecise(c *cli.Context) {
+	l := log.New(os.Stderr, "", 0)
+
+	recipients := toIntArray(RECIPIENTS_STR)
+	suites := toIntArray(SUITES_STR)
+
+	l.Println("-------------------------------------------------------")
+	l.Println("Computing Precise Encoding times for various number of recipients/suites")
+	out := purbs.SimulMeasureEncodingTimePrecise(REPEAT, recipients, suites)
+	fmt.Println(out)
+}
+
 func headerSize(c *cli.Context){
 	l := log.New(os.Stderr, "", 0)
 
-	recipients := []int{1,3,10,30} //,100,300,1000,3000}
+	recipients := toIntArray(RECIPIENTS_STR)
 
 	l.Println("-------------------------------------------------------")
 	l.Println("Computing Header size for various number of recipients")
@@ -66,7 +87,7 @@ func headerSize(c *cli.Context){
 func decoding(c *cli.Context) {
 	l := log.New(os.Stderr, "", 0)
 
-	recipients := []int{1,3,10,30}//,100,300,1000,3000}
+	recipients := toIntArray(RECIPIENTS_STR)
 
 	l.Println("-------------------------------------------------------")
 	l.Println("Computing Decoding time for various number of recipients")
@@ -77,10 +98,25 @@ func decoding(c *cli.Context) {
 func decodingPGP(c *cli.Context) {
 	l := log.New(os.Stderr, "", 0)
 
-	recipients := []int{1,3,10,30} //,100,300,1000,3000}
+	recipients := toIntArray(RECIPIENTS_STR)
 
 	l.Println("-------------------------------------------------------")
 	l.Println("Computing PGP-Decoding time for various number of recipients")
 	out := purbs.SimulDecodePGP(REPEAT, PAYLOAD_SIZE, recipients)
 	fmt.Println(out)
+}
+
+func toIntArray(str string) []int {
+	parts := strings.Split(str, ",")
+	r := make([]int, len(parts))
+
+	for j := 0; j < len(parts); j++ {
+		i, err := strconv.Atoi(parts[j])
+		if err != nil {
+			panic(err)
+		}
+		r[j] = i
+	}
+
+	return r
 }
