@@ -9,28 +9,42 @@ import numpy as np
 import sys
 from utils import *
 
-color = ['#0000FF', '#FF0000', '#800080', '#1E90FF', '#8A2BE2', '#FFA500', '#00FF00', '#F0F0F0']
+colors = ['#0000FF', '#FF0000', '#800080', '#1E90FF', '#8A2BE2', '#FFA500', '#00FF00', '#F0F0F0']
+fillcolors = [c + "AA" for c in colors]
+
 markers = ['D', 'x', 'o', 'd']
 linestyles = ['--', ':', '-', '-.']
-patterns = ['', '//', '.']
+patterns = ['', '.', '//']
 
 mpl.rcParams['text.latex.preamble'] = [r'\usepackage{sansmath}', r'\sansmath']
 mpl.rcParams['text.usetex'] = True
 mpl.rcParams.update({'font.size': 16})
 
 def plotHeaderSize():
-    header_sizes = readAndProcess('header_sizes.json')
-    v = groupByKeyAndGetStats(header_sizes, key="nRecipients")
 
-    Xs = [x for x in v]
-    Ys = [v[x]['mean2'] for x in v]
-    Yerr = [v[x]['err2'] for x in v]
+    header_sizes = readAndProcess2('header_sizes.json')
 
-    plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[0], label='Header Size', marker=markers[0], linestyle=linestyle[0],capsize=2)
+    labels = {}
+    labels['purb-flat'] = 'PURBs (no GHT)'
+    labels['purb'] = 'PURBs'
+    i = 0
+    for header_sizes_type in header_sizes:
+        data = header_sizes[header_sizes_type]
+
+        v = groupByKeyAndGetStats(data, key="nRecipients")
+
+        Xs = [x for x in v]
+        Ys = [v[x]['mean2'] for x in v]
+        Yerr = [v[x]['err2'] for x in v]
+
+        plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[i], label=labels[header_sizes_type], marker=markers[i], linestyle=linestyles[i],capsize=2)
+        i += 1
 
     plt.tick_params(axis='x', labelsize=16)
     plt.tick_params(axis='y', labelsize=16)
     plt.legend()
+    plt.xscale('log')
+    plt.yscale('log')
     plt.ylabel('Header Size [B]')
     plt.xlabel('Number of Recipients')
     plt.grid(True, which="major", axis='both')
@@ -38,24 +52,45 @@ def plotHeaderSize():
     plt.show()
 
 
+def plotHeaderCompactness():
+
+    header_sizes = readAndProcess('compactness.json')
+    v = groupByKeyAndGetStats(header_sizes, key="nRecipients")
+
+    Xs = [x for x in v]
+    Ys = [1 - v[x]['mean2'] for x in v]
+    Yerr = [v[x]['err2'] for x in v]
+
+    plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[0], label="Compactness", marker=markers[0], linestyle=linestyles[0],capsize=2)
+
+    plt.tick_params(axis='x', labelsize=16)
+    plt.tick_params(axis='y', labelsize=16)
+    plt.legend()
+    plt.xscale('log')
+    plt.ylabel('Percentage of useful bits [\\%]')
+    plt.xlabel('Number of Recipients')
+    plt.grid(True, which="major", axis='both')
+    plt.axis()
+    plt.show()
+
+
 def plotDecodeTime():
-    decode = readAndProcess('decode.json')
-    v = groupByKeyAndGetStats(decode, key="totalNRecipients")
+    decode = readAndProcess2('decode.json')
 
-    Xs = [x for x in v]
-    Ys = [v[x]['mean2'] for x in v]
-    Yerr = [v[x]['err2'] for x in v]
+    i = 0
+    for decode_type in decode:
+        data = decode[decode_type]
 
-    plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[0], label='PURB', marker=markers[0], linestyle=linestyle[0],capsize=2)
+        v = groupByKeyAndGetStats(data, key="totalNRecipients")
 
-    decode = readAndProcess('decode_pgp.json')
-    v = groupByKeyAndGetStats(decode, key="totalNRecipients")
-    Xs = [x for x in v]
-    Ys = [v[x]['mean2'] for x in v]
-    Yerr = [v[x]['err2'] for x in v]
+        Xs = [x for x in v]
+        Ys = [v[x]['mean2'] for x in v]
+        Yerr = [v[x]['err2'] for x in v]
 
-    plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[1], label='PGP', marker=markers[1], linestyle=linestyle[1],capsize=2)
+        plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[i], label=decode_type, marker=markers[i], linestyle=linestyles[i],capsize=2)
+        i += 1
 
+        
     plt.tick_params(axis='x', labelsize=16)
     plt.tick_params(axis='y', labelsize=16)
 
@@ -64,6 +99,8 @@ def plotDecodeTime():
     plt.xlabel('Number of Recipients')
     plt.grid(True, which="major", axis='both')
     plt.axis()
+    plt.xscale('log')
+    plt.yscale('log')
     plt.show()
 
 def plotEncodingTime():
@@ -90,15 +127,16 @@ def plotEncodingTime():
         Xs = [x for x in v]
         Ys = [v[x]['mean2'] for x in v]
         Yerr = [v[x]['err2'] for x in v]
-
-        plt.errorbar(Xs, Ys, yerr=Yerr, color=color[i], label=labels[encode_type], marker=markers[i], linestyle=linestyles[i],capsize=2)
+        plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[i], label=labels[encode_type], marker=markers[i], linestyle=linestyles[i],capsize=2)
         i += 1
 
     plt.tick_params(axis='x', labelsize=16)
     plt.tick_params(axis='y', labelsize=16)
 
     plt.legend()
-    plt.ylabel('Encoding time [ms]')
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.ylabel('CPU time [ms]')
     plt.xlabel('Number of Recipients')
     plt.grid(True, which="major", axis='both')
     plt.axis()
@@ -108,12 +146,15 @@ def plotEncodingPrecise():
     encode = readAndProcess2('encode_precise.json')
 
     labels = {}
-    labels['pgp'] = 'PGP'
-    labels['pgp-hidden'] = 'PGP Hidden'
-    labels['purb-flat'] = 'PURBs (no GHT)'
-    labels['purb'] = 'PURBs'
+    labels['cs-ep-values'] = 'EP+CS Creation'
+    labels['placement'] = 'Placement'
+    labels['asym-crypto'] = 'KeyGen'
+    labels['kdfs'] = 'SharedSecrets'
     width = 0.8
 
+    #merge "payload", "CS-place", "" into "others"
+
+    # compute those values to display the graph properly
     nRecipients = []
     nSuites = []
     for row in encode['asym-crypto']:
@@ -122,9 +163,18 @@ def plotEncodingPrecise():
         if row['nSuites'] not in nSuites:
             nSuites.append(row['nSuites'])
 
+    # sets where each colum start Y-wise (stacked bar)
+    lastValues = [0 for x in range(0,(len(nSuites)+1) * len(nRecipients))]
 
+    order = ['cs-ep-values', 'placement', 'asym-crypto', 'kdfs']
+
+    # start plotting loop
     data_type_counter = 0
-    for encode_type in encode:
+    for encode_type in order:
+        if encode_type not in encode:
+            print("Skipping", encode_type, "not found in data")
+            continue
+
         data = encode[encode_type]
 
         grouped_by_suite = groupByKey(data, "nSuites")
@@ -134,11 +184,29 @@ def plotEncodingPrecise():
             data2 = grouped_by_suite[nsuite]
             data3 = groupByKeyAndGetStats(data2, key="nRecipients")
 
-            Xs = [((len(nRecipients) + 1) * x) + suite_counter for x in np.arange(len(data3))]
+            Xs = [x for x in data3]
+            pos = [((len(nSuites) + 1) * x) + suite_counter for x in np.arange(len(data3))]
             Ys = [data3[x]['mean2'] for x in data3]
             Yerr = [data3[x]['err2'] for x in data3]
 
-            plt.bar(Xs, Ys, width, color=color[data_type_counter], edgecolor='black', label='xxx', hatch=patterns[suite_counter])
+            # do not display if we have more suite than recipients
+            i = 0
+            while i < len(Xs):
+                if Xs[i] < nsuite:
+                    Ys[i] = 0
+                i += 1
+
+            bottoms=[]
+            for p in pos:
+                bottoms.append(lastValues[p])
+
+            plt.bar(pos, Ys, bottom=bottoms, width=width, color=fillcolors[data_type_counter], edgecolor='black', label='', hatch=patterns[suite_counter])
+
+            i = 0
+            while i < len(Ys):
+                lastValues[pos[i]] += Ys[i]
+                i += 1
+
             suite_counter += 1
 
         data_type_counter += 1
@@ -149,30 +217,34 @@ def plotEncodingPrecise():
     while i<len(nRecipients):
         j = 0
         while j<len(nSuites):
-            ticks_positions.append((i * len(nRecipients))+ j + i)
-            ticks.append(nRecipients[i])
+            if len(ticks) == 0 or ticks[-1] != nRecipients[i]:
+                ticks_positions.append((i * len(nSuites))+ j + i)
+                ticks.append(nRecipients[i])
             j += 1
         i += 1
-
-    print(ticks_positions)
-    print(ticks)
+    ticks_positions = [x + 1 for x in ticks_positions]
 
     plt.xticks(ticks_positions, ticks)
-    plt.ylabel('CPU time, ms')
+    plt.ylabel('CPU time [ms]')
     plt.xlabel('Number of Recipients')
     plt.yscale('log')
     plt.grid(True, which="major", axis='y')
+    axes = plt.gca()
+    #axes.set_ylim([0,100])
 
     legends = []
     i = 0
-    while i < len(nSuites):
-        dataserie = mpatches.Patch(facecolor='white', edgecolor='black', hatch=patterns[i], label=str(nSuites[i]) + ' suite')
+    for encode_type in order:
+        dataserie = mpatches.Patch(facecolor=fillcolors[i], edgecolor='black', label=labels[encode_type])
         legends.append(dataserie)
         i += 1
 
     i = 0
-    for encode_type in encode:
-        dataserie = mpatches.Patch(facecolor=color[i], edgecolor='black', label=encode_type)
+    while i < len(nSuites):
+        l = str(nSuites[i]) + ' suite'
+        if nSuites[i] != 1:
+            l+='s'
+        dataserie = mpatches.Patch(facecolor='white', edgecolor='black', hatch=patterns[i], label=l)
         legends.append(dataserie)
         i += 1
 
@@ -180,4 +252,16 @@ def plotEncodingPrecise():
 
     plt.show()
 
-plotEncodingPrecise()
+if len(sys.argv) == 1:
+    print("Usage: ./plot.py e|p|h|d")
+else:
+    if sys.argv[1] == 'e':
+        plotEncodingTime()
+    if sys.argv[1] == 'h':
+        plotHeaderSize()
+    if sys.argv[1] == 'd':
+        plotDecodeTime()
+    if sys.argv[1] == 'p':
+        plotEncodingPrecise()
+    if sys.argv[1] == 'c':
+        plotHeaderCompactness()

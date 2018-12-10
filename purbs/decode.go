@@ -35,6 +35,9 @@ func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 				endPos = len(data)
 			}
 		}
+		if endPos > len(data) {
+			endPos = len(data)
+		}
 		cornerstoneBytes := data[startPos:endPos]
 
 		if verbose {

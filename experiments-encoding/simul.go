@@ -10,9 +10,9 @@ import (
 	"strconv"
 )
 
-const REPEAT = 10
+const REPEAT = 20
 const PAYLOAD_SIZE = 100
-const RECIPIENTS_STR = "1,3,10,30,100,300,1000,3000"
+const RECIPIENTS_STR = "1,3,10,30,100" //"1,10,100,1000,10000"
 const SUITES_STR = "1,3,10"
 
 func main() {
@@ -31,11 +31,6 @@ func main() {
 			Action:  decoding,
 		},
 		{
-			Name:    "decodePGP",
-			Aliases: []string{"g"},
-			Action:  decoding,
-		},
-		{
 			Name:    "header",
 			Aliases: []string{"h"},
 			Action:  headerSize,
@@ -44,6 +39,11 @@ func main() {
 			Name: "encode-precise",
 			Aliases: []string{"p"},
 			Action: encodingPrecise,
+		},
+		{
+			Name: "compactness",
+			Aliases: []string{"c"},
+			Action: headerCompactness,
 		},
 	}
 	app.Run(os.Args)
@@ -64,7 +64,7 @@ func encoding(c *cli.Context) {
 func encodingPrecise(c *cli.Context) {
 	l := log.New(os.Stderr, "", 0)
 
-	recipients := toIntArray(RECIPIENTS_STR)
+	recipients := toIntArray("1,10,100")
 	suites := toIntArray(SUITES_STR)
 
 	l.Println("-------------------------------------------------------")
@@ -84,6 +84,19 @@ func headerSize(c *cli.Context){
 	fmt.Println(out)
 }
 
+
+func headerCompactness(c *cli.Context){
+	l := log.New(os.Stderr, "", 0)
+
+	recipients := toIntArray(RECIPIENTS_STR)
+	suites := toIntArray(SUITES_STR)
+
+	l.Println("-------------------------------------------------------")
+	l.Println("Computing Header compactness for various number of recipients/suites")
+	out := purbs.SimulMeasureHeaderCompactness(REPEAT, recipients, suites)
+	fmt.Println(out)
+}
+
 func decoding(c *cli.Context) {
 	l := log.New(os.Stderr, "", 0)
 
@@ -92,17 +105,6 @@ func decoding(c *cli.Context) {
 	l.Println("-------------------------------------------------------")
 	l.Println("Computing Decoding time for various number of recipients")
 	out := purbs.SimulDecode(REPEAT, PAYLOAD_SIZE, recipients)
-	fmt.Println(out)
-}
-
-func decodingPGP(c *cli.Context) {
-	l := log.New(os.Stderr, "", 0)
-
-	recipients := toIntArray(RECIPIENTS_STR)
-
-	l.Println("-------------------------------------------------------")
-	l.Println("Computing PGP-Decoding time for various number of recipients")
-	out := purbs.SimulDecodePGP(REPEAT, PAYLOAD_SIZE, recipients)
 	fmt.Println(out)
 }
 

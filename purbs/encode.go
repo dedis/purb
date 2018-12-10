@@ -480,7 +480,10 @@ func (purb *Purb) placePayloadAndCornerstones() {
 			region := buffer.slice(cornerstoneAllowedPos, endPos)
 
 			for b := 0; b < cornerstoneLength; b++ {
-				xorOfAllPositions[b] ^= region[b]
+				if b < len(region) {
+					thisByte := region[b]
+					xorOfAllPositions[b] ^= thisByte
+				}
 			}
 		}
 

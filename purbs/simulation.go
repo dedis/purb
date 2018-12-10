@@ -22,24 +22,24 @@ const simulationUsesSimplifiedLayout = false
 func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int) string {
 	l := log.New(os.Stderr, "", 0)
 
-	msg := simulGetRandomBytes(100)
-
-	resultsAsymCrypto := new(Results)
-	resultsEPGen := new(Results)
-	resultsCSPlace := new(Results)
+	resultsPKGen := new(Results)
+	resultsKDFs := new(Results)
 	resultsEPPlace := new(Results)
 	resultsPayload := new(Results)
-	resultsXOR := new(Results)
+	resultsCSAndEPValues := new(Results)
 	resultsMapToBytes := new(Results)
 
 	m := newMonitor()
 	for _, nSuites := range suites {
 		for _, nRecipients := range recipients {
 			for k := 0; k < nRepeat; k++ {
+
+				msg := simulGetRandomBytes(100)
+
 				l.Println("Simulating for", nRecipients, "recipients,", nSuites, "suites,", k, "/", nRepeat)
 
 				si := createMultiInfo(nSuites)
-				recipients := createDecoders(nRecipients)
+				recipients := createMultiDecoders(nRecipients, si)
 				publicFixedParams := NewPublicFixedParameters(si, false)
 
 
@@ -66,15 +66,15 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 
 				m.reset()
 				purb.createCornerstones()
-				resultsAsymCrypto.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
+				resultsPKGen.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
+
 				purb.createEntryPoints()
-				resultsEPGen.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
+				resultsKDFs.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 
 				orderedSuites, err := purb.placeCornerstones()
 				if err != nil {
 					panic(err)
 				}
-				resultsCSPlace.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 
 				if purb.PublicParameters.SimplifiedEntrypointsPlacement {
 					purb.placeEntrypointsSimplified(orderedSuites)
@@ -91,7 +91,7 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 
 				purb.placePayloadAndCornerstones()
 
-				resultsXOR.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
+				resultsCSAndEPValues.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 
 				blob := purb.ToBytes()
 				resultsMapToBytes.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.record())
@@ -112,12 +112,11 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 	}
 
 	s := "{"
-	s += "\"asym-crypto\": " + resultsAsymCrypto.String()+","
-	s += "\"EP-gen\": " + resultsEPGen.String()+","
-	s += "\"CS-place\": " + resultsCSPlace.String()+","
-	s += "\"EP-place\": " + resultsEPPlace.String()+","
+	s += "\"asym-crypto\": " + resultsPKGen.String()+","
+	s += "\"kdfs\": " + resultsKDFs.String()+","
+	s += "\"placement\": " + resultsEPPlace.String()+","
 	s += "\"payload\": " + resultsPayload.String()+","
-	s += "\"cs-ep-xor\": " + resultsXOR.String()+","
+	s += "\"cs-ep-values\": " + resultsCSAndEPValues.String()+","
 	s += "\"byte-map\": " + resultsMapToBytes.String()
 	s += "}"
 
@@ -178,7 +177,7 @@ func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) strin
 
 				// ----------- PURBs simplified ---------------
 				si := createMultiInfo(nSuites)
-				decs := createDecoders(nRecipients)
+				decs := createMultiDecoders(nRecipients, si)
 				publicFixedParams := NewPublicFixedParameters(si, true)
 
 				m.reset()
@@ -199,7 +198,7 @@ func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) strin
 
 				// ----------------- PURBs --------------------
 				si = createMultiInfo(nSuites)
-				decs = createDecoders(nRecipients)
+				decs = createMultiDecoders(nRecipients, si)
 				publicFixedParams = NewPublicFixedParameters(si, false)
 
 				m.reset()
@@ -234,7 +233,8 @@ func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) strin
 func SimulMeasureHeaderSize(nRepeat int, numRecipients []int) string {
 	l := log.New(os.Stderr, "", 0)
 
-	results := new(Results)
+	resultsPURBs := new(Results)
+	resultsFlat := new(Results)
 
 	si := createInfo()
 	key := make([]byte, SYMMETRIC_KEY_LENGTH)
@@ -266,81 +266,216 @@ func SimulMeasureHeaderSize(nRepeat int, numRecipients []int) string {
 			p.CreateHeader()
 			value := float64(p.Header.Length())
 
-			results.add(nRecipients, -1, k, -1, -1, nRepeat, value)
+			resultsPURBs.add(nRecipients, -1, k, -1, -1, nRepeat, value)
+
+			// flat
+			publicFixedParams = NewPublicFixedParameters(si, true)
+			p = &Purb{
+				Nonce:            nonce,
+				Header:           nil,
+				Payload:          nil,
+				PayloadKey:       key,
+				IsVerbose:        false,
+				Recipients:       decs,
+				Stream:           random.New(),
+				OriginalData:     nil,
+				PublicParameters: publicFixedParams,
+			}
+			p.PublicParameters.HashTableCollisionLinearResolutionAttempts = 3
+			p.CreateHeader()
+			value = float64(p.Header.Length())
+
+			resultsFlat.add(nRecipients, -1, k, -1, -1, nRepeat, value)
 		}
 	}
-	return results.String()
+
+	s := "{"
+	s += "\"purb-flat\": " + resultsPURBs.String()+","
+	s += "\"purb\": " + resultsFlat.String()
+	s += "}"
+	return s
 }
 
 // SimulDecode
 func SimulDecode(nRepeat int, payloadLength int, nRecipients []int) string {
 	l := log.New(os.Stderr, "", 0)
 
-	results := new(Results)
+	msg := simulGetRandomBytes(100)
 
-	msg := simulGetRandomBytes(payloadLength)
+	resultsPGP := new(Results)
+	resultsPGPHidden := new(Results)
+	resultsPURBFlat := new(Results)
+	resultsPURB := new(Results)
 
-	for _, nRecipient := range nRecipients {
+	nSuites := 3
 
-		// first, create a PURB
-		si := createInfo()
-		publicFixedParams := NewPublicFixedParameters(si, simulationUsesSimplifiedLayout)
-		decs := createDecoders(nRecipient)
-		purb, err := Encode(msg, decs, random.New(), publicFixedParams, simulationIsVerbose)
-		if err != nil {
-			panic(err.Error())
-		}
-		blob := purb.ToBytes()
+	m := newMonitor()
+	for _, nRecipients := range nRecipients {
+		for k := 0; k < nRepeat; k++ {
+			l.Println("Simulating for", nRecipients, "recipients,", nSuites, "suites,", k, "/", nRepeat)
 
-		m := newMonitor()
-		for i := 0; i < nRepeat; i++ {
-			for j := 0; j < nRecipient; j++ {
-				l.Println("Decoding for recipient", j, "out of", nRecipient, ",", i, "/", nRepeat)
-				Decode(blob, &decs[j], publicFixedParams, simulationIsVerbose)
-				val := m.recordAndReset()
-				results.add(j, -1, i, nRecipient, -1, nRepeat, float64(val))
+			step := int(math.Floor(float64(nRecipients) / 10))
+			if step < 1 {
+				step = 1
 			}
-		}
-	}
 
-	return results.String()
-}
-
-// SimulDecode
-func SimulDecodePGP(nRepeat int, payloadLength int, nRecipients []int) string {
-	l := log.New(os.Stderr, "", 0)
-
-	results := new(Results)
-
-	msg := simulGetRandomBytes(payloadLength)
-
-	for _, nRecipient := range nRecipients {
-
-		// first, create a PURB
-		recipients := make([]*pgp.PGP, nRecipient)
-		for j := 0; j < nRecipient; j++ {
-			recipients[j] = pgp.NewPGP()
-		}
-		enc, err := pgp.Encrypt(msg, recipients, false)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		m := newMonitor()
-		for i := 0; i < nRepeat; i++ {
-			for j := 0; j < nRecipient; j++ {
-				l.Println("PGP-Decoding for recipient", j, "out of", nRecipient, ",", i, "/", nRepeat)
-
-				_, err = recipients[j].Decrypt(enc)
+			//------------------- PGP -------------------
+			recipients := make([]*pgp.PGP, 0)
+			for i := 0; i < nRecipients; i++ {
+				recipients = append(recipients, pgp.NewPGP())
+			}
+			enc, err := pgp.Encrypt(msg, recipients, false)
+			if err != nil {
+				log.Fatal(err)
+			}
+			// sanity check
+			for i := 0; i<len(recipients); i+=step {
+				m.reset()
+				dec, err := recipients[i].Decrypt(enc)
+				resultsPGP.add(i, nSuites, k, nRecipients, -1, nRepeat, m.record())
 				if err != nil {
 					log.Fatal(err)
 				}
-				val := m.recordAndReset()
-				results.add(j, -1, i, nRecipient, -1, nRepeat, float64(val))
+				if !bytes.Equal(dec, msg) {
+					panic("PGP did not decrypt correctly")
+				}
+				if i % 1 == 0 {
+					l.Println("PGP Decrypting", i, "/", len(recipients))
+				}
+			}
+
+			//---------------- PGP hidden -------------------
+			enc, err = pgp.Encrypt(msg, recipients, true)
+			if err != nil {
+				log.Fatal(err)
+			}
+			// sanity check
+			for i := 0; i<len(recipients); i+=step {
+				m.reset()
+				dec, err := recipients[i].Decrypt(enc)
+				resultsPGPHidden.add(i, nSuites, k, nRecipients, -1, nRepeat, m.record())
+				if err != nil {
+				log.Fatal(err)
+				}
+				if !bytes.Equal(dec, msg) {
+				panic("PGP-Hidden did not decrypt correctly")
+				}
+				if i % 1 == 0 {
+					l.Println("PGP-Hidden Decrypting", i, "/", len(recipients))
+				}
+			}
+
+			// ----------- PURBs simplified ---------------
+			si := createMultiInfo(nSuites)
+			decs := createMultiDecoders(nRecipients, si)
+			publicFixedParams := NewPublicFixedParameters(si, true)
+
+			purb, err := Encode(msg, decs, random.New(), publicFixedParams, simulationIsVerbose)
+			blob := purb.ToBytes()
+			if err != nil {
+				panic(err.Error())
+			}
+			// sanity check
+			for i := 0; i<len(recipients); i+=step {
+				m.reset()
+				success, out, err := Decode(blob, &decs[i], publicFixedParams, simulationIsVerbose)
+				resultsPURBFlat.add(i, nSuites, k, nRecipients, -1, nRepeat, m.record())
+				if !success || !bytes.Equal(out, msg) {
+					panic("PURBs-Flat did not decrypt correctly")
+				}
+				if err != nil {
+					panic(err.Error())
+				}
+				if i % 1 == 0 {
+					l.Println("PURB-Flat Decrypting", i, "/", len(recipients))
+				}
+			}
+
+			// ----------------- PURBs --------------------
+			si = createMultiInfo(nSuites)
+			decs = createMultiDecoders(nRecipients, si)
+			publicFixedParams = NewPublicFixedParameters(si, false)
+
+			purb, err = Encode(msg, decs, random.New(), publicFixedParams, simulationIsVerbose)
+			blob = purb.ToBytes()
+			if err != nil {
+				panic(err.Error())
+			}
+
+			for i := 0; i<len(recipients); i+=step {
+				m.reset()
+				success, out, err := Decode(blob, &decs[i], publicFixedParams, simulationIsVerbose)
+				resultsPURB.add(i, nSuites, k, nRecipients, -1, nRepeat, m.record())
+				if !success || !bytes.Equal(out, msg) {
+					panic("PURBs did not decrypt correctly")
+				}
+				if err != nil {
+					panic(err.Error())
+				}
+				if i % 1 == 0 {
+					l.Println("PURB Decrypting", i, "/", len(recipients))
+				}
 			}
 		}
 	}
-	return results.String()
+
+	s := "{"
+	s += "\"pgp\": " + resultsPGP.String() + ","
+	s += "\"pgp-hidden\": " + resultsPGPHidden.String() + ","
+	s += "\"purb-flat\": " + resultsPURBFlat.String() + ","
+	s += "\"purb\": " + resultsPURB.String()
+	s += "}"
+	return s
+}
+
+// SimulMeasureHeaderSize
+func SimulMeasureHeaderCompactness(nRepeat int, recipients []int, suites []int) string {
+	l := log.New(os.Stderr, "", 0)
+
+	resultsPURBs := new(Results)
+
+	si := createInfo()
+	key := make([]byte, SYMMETRIC_KEY_LENGTH)
+	nonce := make([]byte, AEAD_NONCE_LENGTH)
+	random.Bytes(key, random.New())
+	random.Bytes(nonce, random.New())
+
+	for _, nSuites := range suites {
+		for _, nRecipients := range recipients {
+
+			decs := createDecoders(nRecipients)
+			for k := 0; k < nRepeat; k++ {
+				l.Println("Simulating for", nRecipients, "recipients,", nSuites, "suites,", k, "/", nRepeat)
+				// Baseline
+				// create the PURB datastructure
+
+				publicFixedParams := NewPublicFixedParameters(si, false)
+				p := &Purb{
+					Nonce:            nonce,
+					Header:           nil,
+					Payload:          nil,
+					PayloadKey:       key,
+					IsVerbose:        false,
+					Recipients:       decs,
+					Stream:           random.New(),
+					OriginalData:     nil,
+					PublicParameters: publicFixedParams,
+				}
+				p.PublicParameters.HashTableCollisionLinearResolutionAttempts = 3
+				p.CreateHeader()
+				accu := float64(0)
+				p.Header.Layout.ScanFreeRegions(func(low, high int) {
+					accu += float64(high - low)
+				}, p.Header.Length())
+
+				c := accu / float64(p.Header.Length())
+
+				resultsPURBs.add(nRecipients, nSuites, k, -1, -1, nRepeat, c)
+			}
+		}
+	}
+
+	return resultsPURBs.String()
 }
 
 func createInfo() SuiteInfoMap {
