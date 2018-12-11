@@ -428,13 +428,13 @@ func SimulDecode(nRepeat int, payloadLength int, nRecipients []int) string {
 	return s
 }
 
-// SimulMeasureHeaderSize
+// SimulMeasureHeaderCompactness
 func SimulMeasureHeaderCompactness(nRepeat int, recipients []int, suites []int) string {
 	l := log.New(os.Stderr, "", 0)
 
 	resultsPURBs := new(Results)
 
-	si := createInfo()
+
 	key := make([]byte, SYMMETRIC_KEY_LENGTH)
 	nonce := make([]byte, AEAD_NONCE_LENGTH)
 	random.Bytes(key, random.New())
@@ -443,7 +443,11 @@ func SimulMeasureHeaderCompactness(nRepeat int, recipients []int, suites []int) 
 	for _, nSuites := range suites {
 		for _, nRecipients := range recipients {
 
-			decs := createDecoders(nRecipients)
+			si := createMultiInfoReal(nSuites)
+
+			fmt.Println(si)
+
+			decs := createMultiDecoders(nRecipients, si)
 			for k := 0; k < nRepeat; k++ {
 				l.Println("Simulating for", nRecipients, "recipients,", nSuites, "suites,", k, "/", nRepeat)
 				// Baseline
@@ -496,6 +500,37 @@ func createDecoders(n int) []Recipient {
 		}
 	}
 	return decs
+}
+
+func createMultiInfoReal(N int) SuiteInfoMap {
+
+	// let's use the following suites
+	// PURB_A, cornerstone size 64, ep size 48
+	// PURB_B, cornerstone size 32, ep size 48
+	// PURB_C, cornerstone size 64, ep size 80
+	// PURB_D, cornerstone size 32, ep size 80
+	// PURB_E, cornerstone size 64, ep size 64
+	// PURB_F, cornerstone size 32, ep size 64
+
+	info := make(SuiteInfoMap)
+	positions := make([][]int, N+1)
+	suffixes := []string{"", "a", "b", "c", "d", "e", "f", "g", "h", "i"}
+	for k := 0; k < N; k++ {
+		limit := int(math.Ceil(math.Log2(float64(N)))) + 1
+		positions[k] = make([]int, limit)
+		floor := AEAD_NONCE_LENGTH
+		for i := 0; i < limit; i++ {
+			positions[k][i] = floor + k%int(math.Pow(2, float64(i)))*CORNERSTONE_LENGTH
+			floor += int(math.Pow(2, float64(i))) * CORNERSTONE_LENGTH
+		}
+		//log.Println(positions[k])
+	}
+	for i := 0; i < N; i++ {
+		info[curve25519.NewBlakeSHA256Curve25519(true).String()+suffixes[i]] = &SuiteInfo{
+			AllowedPositions: positions[i], CornerstoneLength: CORNERSTONE_LENGTH}
+	}
+
+	return info
 }
 
 func createMultiInfo(N int) SuiteInfoMap {

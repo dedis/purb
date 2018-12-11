@@ -168,6 +168,7 @@ func (purb *Purb) createEntryPoints() {
 			Recipient:    recipient,
 			SharedSecret: sharedSecret,
 			Offset:       -1,
+			Length: purb.PublicParameters.SuiteInfoMap[recipient.SuiteName].EntryPointLength,
 		}
 
 		// store entrypoint
@@ -281,7 +282,7 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 	return sortedSuites, nil
 }
 
-// placeEntrypoints will findAllRangesStrictlyBefore, place and reserve part of the header for the data
+// placeEntrypoints will find, place and reserve part of the header for the data
 // All hash tables start after their cornerstone.
 func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 	for _, suite := range orderedSuites {
@@ -305,8 +306,8 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 				for j := 0; j < purb.PublicParameters.HashTableCollisionLinearResolutionAttempts; j++ {
 					posInHashTable = (intOfHashedValue + j) % tableSize
 
-					effectiveStartPos := initialStartPos + posInHashTable*purb.Header.EntryPointLength
-					effectiveEndPos := initialStartPos + (posInHashTable+1)*purb.Header.EntryPointLength
+					effectiveStartPos := initialStartPos + posInHashTable * entrypoint.Length
+					effectiveEndPos := initialStartPos + (posInHashTable+1) * entrypoint.Length
 
 					if purb.Header.Layout.Reserve(effectiveStartPos, effectiveEndPos, true, "hash"+strconv.Itoa(tableSize)) {
 						purb.Header.EntryPoints[suite][entrypointID].Offset = effectiveStartPos
@@ -323,7 +324,7 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 				if !positionFound {
 					//If we haven't positionFound the entrypoint, update the hash table size and initialStartPos
 					//initialStartPos = current hash table initialStartPos + number of entries in the table* the length of each entrypoint
-					initialStartPos += tableSize * purb.Header.EntryPointLength
+					initialStartPos += tableSize * entrypoint.Length
 					tableSize *= 2
 				}
 			}
@@ -334,14 +335,14 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 // placeEntrypoints will findAllRangesStrictlyBefore, place and reserve part of the header for the data. Does not use a hash table, put the points linearly
 func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
 	for _, suite := range orderedSuites {
-		for entryPointID := range purb.Header.EntryPoints[suite] {
+		for entryPointID, entrypoint := range purb.Header.EntryPoints[suite] {
 			//hash table startPos right after the cornerstone's offset-0
 			startPos := purb.PublicParameters.SuiteInfoMap[suite].AllowedPositions[0] + purb.PublicParameters.SuiteInfoMap[suite].CornerstoneLength
 
 			for {
-				if purb.Header.Layout.Reserve(startPos, startPos+purb.Header.EntryPointLength, true, "hash"+strconv.Itoa(startPos)) {
+				if purb.Header.Layout.Reserve(startPos, startPos+entrypoint.Length, true, "hash"+strconv.Itoa(startPos)) {
 					purb.Header.EntryPoints[suite][entryPointID].Offset = startPos
-					endPos := startPos + purb.Header.EntryPointLength
+					endPos := startPos + entrypoint.Length
 
 					if purb.IsVerbose {
 						log.LLvlf3("Found position for entrypoint %v of suite %v, SIMPLIFIED, start %v, end %v", entryPointID, suite, startPos, endPos)
@@ -350,7 +351,7 @@ func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
 					//log.Printf("Placing entry at [%d-%d]", startPos, startPos+h.EntryPointLength)
 					break
 				} else {
-					startPos += purb.Header.EntryPointLength
+					startPos += entrypoint.Length
 				}
 			}
 		}
@@ -416,7 +417,7 @@ func (purb *Purb) placePayloadAndCornerstones() {
 			// we use shared secret as a seed to a Stream cipher
 			xof := entrypoint.Recipient.Suite.XOF(entrypoint.SharedSecret)
 			startPos := entrypoint.Offset
-			endPos := startPos + purb.Header.EntryPointLength
+			endPos := startPos + entrypoint.Length
 
 			region := buffer.growAndGetRegion(startPos, endPos)
 			xof.XORKeyStream(region, entrypointContent)
@@ -534,7 +535,6 @@ func newEmptyHeader() *Header {
 	return &Header{
 		EntryPoints:      make(map[string][]*EntryPoint),
 		Cornerstones:     make(map[string]*Cornerstone),
-		EntryPointLength: 0,
 		Layout:           NewRegionReservationStruct(),
 	}
 }
@@ -561,8 +561,8 @@ func (h *Header) Length() int {
 
 	for _, entryPoints := range h.EntryPoints {
 		for _, entrypoint := range entryPoints {
-			if length < entrypoint.Offset+h.EntryPointLength {
-				length = entrypoint.Offset + h.EntryPointLength
+			if length < entrypoint.Offset + entrypoint.Length {
+				length = entrypoint.Offset + entrypoint.Length
 			}
 		}
 	}
