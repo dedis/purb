@@ -12,6 +12,8 @@ import (
 	"github.com/dedis/kyber/util/random"
 	"github.com/dedis/purbs/experiments-encoding/pgp"
 	"os"
+	"math/rand"
+	"time"
 )
 
 const simulationIsVerbose = false
@@ -39,7 +41,7 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 				l.Println("Simulating for", nRecipients, "recipients,", nSuites, "suites,", k, "/", nRepeat)
 
 				si := createMultiInfo(nSuites)
-				recipients := createMultiDecoders(nRecipients, si)
+				recipients := createMultiDecoders(nRecipients, nSuites, si)
 				publicFixedParams := NewPublicFixedParameters(si, false)
 
 
@@ -61,9 +63,6 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 				// creation of the entrypoints and cornerstones, places entrypoint and cornerstones
 				purb.Header = newEmptyHeader()
 
-				// entrypoints contain the symm key to the payload, and a pointer
-				purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
-
 				m.reset()
 				purb.createCornerstones()
 				resultsPKGen.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
@@ -71,15 +70,12 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 				purb.createEntryPoints()
 				resultsKDFs.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 
-				orderedSuites, err := purb.placeCornerstones()
-				if err != nil {
-					panic(err)
-				}
+				purb.placeCornerstones()
 
 				if purb.PublicParameters.SimplifiedEntrypointsPlacement {
-					purb.placeEntrypointsSimplified(orderedSuites)
+					purb.placeEntrypointsSimplified()
 				} else {
-					purb.placeEntrypoints(orderedSuites)
+					purb.placeEntrypoints()
 				}
 				resultsEPPlace.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 
@@ -95,10 +91,6 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 
 				blob := purb.ToBytes()
 				resultsMapToBytes.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.record())
-
-				if err != nil {
-					panic(err.Error())
-				}
 
 				success, out, err := Decode(blob, &recipients[0], publicFixedParams, simulationIsVerbose)
 				if !success || !bytes.Equal(out, msg) {
@@ -177,7 +169,7 @@ func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) strin
 
 				// ----------- PURBs simplified ---------------
 				si := createMultiInfo(nSuites)
-				decs := createMultiDecoders(nRecipients, si)
+				decs := createMultiDecoders(nRecipients, nSuites, si)
 				publicFixedParams := NewPublicFixedParameters(si, true)
 
 				m.reset()
@@ -198,7 +190,7 @@ func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) strin
 
 				// ----------------- PURBs --------------------
 				si = createMultiInfo(nSuites)
-				decs = createMultiDecoders(nRecipients, si)
+				decs = createMultiDecoders(nRecipients, nSuites, si)
 				publicFixedParams = NewPublicFixedParameters(si, false)
 
 				m.reset()
@@ -367,7 +359,7 @@ func SimulDecode(nRepeat int, payloadLength int, nRecipients []int) string {
 
 			// ----------- PURBs simplified ---------------
 			si := createMultiInfo(nSuites)
-			decs := createMultiDecoders(nRecipients, si)
+			decs := createMultiDecoders(nRecipients, nSuites, si)
 			publicFixedParams := NewPublicFixedParameters(si, true)
 
 			purb, err := Encode(msg, decs, random.New(), publicFixedParams, simulationIsVerbose)
@@ -393,7 +385,7 @@ func SimulDecode(nRepeat int, payloadLength int, nRecipients []int) string {
 
 			// ----------------- PURBs --------------------
 			si = createMultiInfo(nSuites)
-			decs = createMultiDecoders(nRecipients, si)
+			decs = createMultiDecoders(nRecipients, nSuites, si)
 			publicFixedParams = NewPublicFixedParameters(si, false)
 
 			purb, err = Encode(msg, decs, random.New(), publicFixedParams, simulationIsVerbose)
@@ -443,12 +435,11 @@ func SimulMeasureHeaderCompactness(nRepeat int, recipients []int, suites []int) 
 	for _, nSuites := range suites {
 		for _, nRecipients := range recipients {
 
-			si := createMultiInfoReal(nSuites)
-
-			fmt.Println(si)
-
-			decs := createMultiDecoders(nRecipients, si)
 			for k := 0; k < nRepeat; k++ {
+
+				si := createMultiInfoReal(nSuites)
+
+				decs := createMultiDecoders(nRecipients, nSuites, si)
 				l.Println("Simulating for", nRecipients, "recipients,", nSuites, "suites,", k, "/", nRepeat)
 				// Baseline
 				// create the PURB datastructure
@@ -483,10 +474,14 @@ func SimulMeasureHeaderCompactness(nRepeat int, recipients []int, suites []int) 
 }
 
 func createInfo() SuiteInfoMap {
+
+	entryPointLen := 16 + 4
+	cornerstoneLen := 32
+
 	info := make(SuiteInfoMap)
 	info[curve25519.NewBlakeSHA256Curve25519(true).String()] = &SuiteInfo{
-		AllowedPositions:  []int{12 + 0*CORNERSTONE_LENGTH, 12 + 1*CORNERSTONE_LENGTH, 12 + 3*CORNERSTONE_LENGTH, 12 + 4*CORNERSTONE_LENGTH},
-		CornerstoneLength: CORNERSTONE_LENGTH}
+		AllowedPositions:  []int{12 + 0*cornerstoneLen, 12 + 1*cornerstoneLen, 12 + 3*cornerstoneLen, 12 + 4*cornerstoneLen},
+		CornerstoneLength: cornerstoneLen, EntryPointLength: entryPointLen}
 	return info
 }
 
@@ -502,60 +497,101 @@ func createDecoders(n int) []Recipient {
 	return decs
 }
 
+func shiftByAEAD_NONCE_LENGTH(pos []int) []int {
+	res := make([]int, len(pos))
+
+	for i:=0; i<len(pos); i++ {
+		res[i] = AEAD_NONCE_LENGTH + pos[i]
+	}
+
+	return res
+}
+
 func createMultiInfoReal(N int) SuiteInfoMap {
 
 	// let's use the following suites
-	// PURB_A, cornerstone size 64, ep size 48
-	// PURB_B, cornerstone size 32, ep size 48
-	// PURB_C, cornerstone size 64, ep size 80
-	// PURB_D, cornerstone size 32, ep size 80
-	// PURB_E, cornerstone size 64, ep size 64
-	// PURB_F, cornerstone size 32, ep size 64
+	// PURB_A, cornerstone size 64, ep size 48, pos 0
+	// PURB_B, cornerstone size 32, ep size 48, pos 0, 64
+	// PURB_C, cornerstone size 64, ep size 80, pos 0, 64, 96
+	// PURB_D, cornerstone size 32, ep size 80, pos 0, 32, 64, 160
+	// PURB_E, cornerstone size 64, ep size 64, pos 0, 64, 128, 192
+	// PURB_F, cornerstone size 32, ep size 64, pos 0, 32, 64, 96, 128, 256
+
 
 	info := make(SuiteInfoMap)
-	positions := make([][]int, N+1)
-	suffixes := []string{"", "a", "b", "c", "d", "e", "f", "g", "h", "i"}
-	for k := 0; k < N; k++ {
-		limit := int(math.Ceil(math.Log2(float64(N)))) + 1
-		positions[k] = make([]int, limit)
-		floor := AEAD_NONCE_LENGTH
-		for i := 0; i < limit; i++ {
-			positions[k][i] = floor + k%int(math.Pow(2, float64(i)))*CORNERSTONE_LENGTH
-			floor += int(math.Pow(2, float64(i))) * CORNERSTONE_LENGTH
-		}
-		//log.Println(positions[k])
+
+	info["PURB_A"] = &SuiteInfo{
+		AllowedPositions: shiftByAEAD_NONCE_LENGTH([]int{0}),
+		CornerstoneLength:  64,
+		EntryPointLength: 48,
 	}
-	for i := 0; i < N; i++ {
-		info[curve25519.NewBlakeSHA256Curve25519(true).String()+suffixes[i]] = &SuiteInfo{
-			AllowedPositions: positions[i], CornerstoneLength: CORNERSTONE_LENGTH}
+	info["PURB_B"] = &SuiteInfo{
+		AllowedPositions: shiftByAEAD_NONCE_LENGTH([]int{0, 64}),
+		CornerstoneLength:  32,
+		EntryPointLength: 48,
+	}
+	info["PURB_C"] = &SuiteInfo{
+		AllowedPositions: shiftByAEAD_NONCE_LENGTH([]int{0, 64, 96}),
+		CornerstoneLength:  64,
+		EntryPointLength: 80,
+	}
+	info["PURB_D"] = &SuiteInfo{
+		AllowedPositions: shiftByAEAD_NONCE_LENGTH([]int{0, 32, 64, 160}),
+		CornerstoneLength:  32,
+		EntryPointLength: 80,
+	}
+	info["PURB_E"] = &SuiteInfo{
+		AllowedPositions: shiftByAEAD_NONCE_LENGTH([]int{0, 64, 128, 192}),
+		CornerstoneLength:  64,
+		EntryPointLength: 64,
+	}
+	info["PURB_F"] = &SuiteInfo{
+		AllowedPositions: shiftByAEAD_NONCE_LENGTH([]int{0, 32, 64, 96, 128, 256}),
+		CornerstoneLength:  32,
+		EntryPointLength: 64,
+	}
+
+	keys := make([]string, 0)
+	for k := range info {
+		keys = append(keys, k)
+	}
+	rand.Seed(time.Now().UTC().UnixNano())
+	for len(info) > N {
+		to_destroy := keys[rand.Intn(len(keys))]
+		delete(info, to_destroy)
 	}
 
 	return info
 }
 
 func createMultiInfo(N int) SuiteInfoMap {
+
+	entryPointLen := 16 + 4
+	cornerstoneLen := 32
+	aeadNonceLen := 12
+
 	info := make(SuiteInfoMap)
 	positions := make([][]int, N+1)
 	suffixes := []string{"", "a", "b", "c", "d", "e", "f", "g", "h", "i"}
 	for k := 0; k < N; k++ {
 		limit := int(math.Ceil(math.Log2(float64(N)))) + 1
 		positions[k] = make([]int, limit)
-		floor := AEAD_NONCE_LENGTH
+		floor := aeadNonceLen
 		for i := 0; i < limit; i++ {
-			positions[k][i] = floor + k%int(math.Pow(2, float64(i)))*CORNERSTONE_LENGTH
-			floor += int(math.Pow(2, float64(i))) * CORNERSTONE_LENGTH
+			positions[k][i] = floor + k%int(math.Pow(2, float64(i)))*cornerstoneLen
+			floor += int(math.Pow(2, float64(i))) * cornerstoneLen
 		}
 		//log.Println(positions[k])
 	}
 	for i := 0; i < N; i++ {
 		info[curve25519.NewBlakeSHA256Curve25519(true).String()+suffixes[i]] = &SuiteInfo{
-			AllowedPositions: positions[i], CornerstoneLength: CORNERSTONE_LENGTH}
+			AllowedPositions: positions[i], CornerstoneLength: cornerstoneLen, EntryPointLength:entryPointLen}
 	}
 
 	return info
 }
 
-func createMultiDecoders(n int, si SuiteInfoMap) []Recipient {
+func createMultiDecoders(n int, numberOfSuites int, si SuiteInfoMap) []Recipient {
 	type suite struct {
 		Name  string
 		Value Suite
@@ -563,6 +599,9 @@ func createMultiDecoders(n int, si SuiteInfoMap) []Recipient {
 	decs := make([]Recipient, 0)
 	suites := make([]suite, 0)
 	for name := range si {
+		if len(suites) >= numberOfSuites {
+			break
+		}
 		suites = append(suites, suite{name, curve25519.NewBlakeSHA256Curve25519(true)})
 	}
 	for n > 0 {

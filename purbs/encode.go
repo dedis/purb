@@ -5,7 +5,6 @@ import (
 	"crypto/cipher"
 	"crypto/sha256"
 	"encoding/binary"
-	"errors"
 	"github.com/dedis/kyber/util/key"
 	"github.com/dedis/kyber/util/random"
 	"github.com/dedis/onet/log"
@@ -67,21 +66,14 @@ func (purb *Purb) CreateHeader() {
 
 	purb.Header = newEmptyHeader()
 
-	// entrypoints contain the symm key to the payload, and a pointer
-	purb.Header.EntryPointLength = SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
-
 	purb.createCornerstones()
 	purb.createEntryPoints()
-
-	orderedSuites, err := purb.placeCornerstones()
-	if err != nil {
-		panic(err)
-	}
+	purb.placeCornerstones()
 
 	if purb.PublicParameters.SimplifiedEntrypointsPlacement {
-		purb.placeEntrypointsSimplified(orderedSuites)
+		purb.placeEntrypointsSimplified()
 	} else {
-		purb.placeEntrypoints(orderedSuites)
+		purb.placeEntrypoints()
 	}
 }
 
@@ -110,7 +102,7 @@ func (purb *Purb) createCornerstones() {
 				continue
 			}
 
-			if keyPair.Hiding.HideLen() != purb.PublicParameters.SuiteInfoMap[recipient.SuiteName].CornerstoneLength {
+			if keyPair.Hiding.HideLen() > purb.PublicParameters.SuiteInfoMap[recipient.SuiteName].CornerstoneLength {
 				log.Fatal("Length of elligator Encoded PayloadKey is not what we expect. It's ", keyPair.Hiding.HideLen())
 			}
 
@@ -180,8 +172,108 @@ func (purb *Purb) createEntryPoints() {
 	}
 }
 
+func placeCornerstonesHelper(
+	mainLayout *RegionReservationStruct,
+	secondaryLayout *RegionReservationStruct,
+	cornerstonesToPlace []*Cornerstone,
+	placedCornerstones []*Cornerstone,
+	verbose bool) []*Cornerstone {
+
+	if len(cornerstonesToPlace) == 0 {
+		if verbose {
+			log.LLvlf3("Placed all cornerstones!")
+			for _, c := range placedCornerstones {
+				log.LLvl3("  ", c.SuiteName, "between", c.Offset, c.EndPos)
+			}
+		}
+		return placedCornerstones
+	}
+
+	// iteratively try to place remaining cornerstone
+	for _, cornerstone := range cornerstonesToPlace {
+
+		// prepare datastructure for recursion, do deep copies
+		placedCornerstones2 := make([]*Cornerstone, 0)
+		for _, c := range placedCornerstones {
+			placedCornerstones2 = append(placedCornerstones2, &Cornerstone {
+				SuiteName: c.SuiteName,
+				SuiteInfo: c.SuiteInfo,
+				EndPos: c.EndPos,
+				Offset: c.Offset,
+			})
+		}
+		mainLayout2 := mainLayout.Clone()
+		secondaryLayout2 := secondaryLayout.Clone()
+
+		// try to place this one
+		suiteInfo := cornerstone.SuiteInfo
+		allowedPositions := cornerstone.SuiteInfo.AllowedPositions
+
+		// find the first free position in the layout. We use the "secondaryLayout" since secondary positions are *not* free for other cornerstones !
+		smallestNonConflictingIndex := -1
+
+		for index, startPos := range allowedPositions {
+			endPos := startPos + suiteInfo.CornerstoneLength
+
+			if secondaryLayout2.IsFree(startPos, endPos) {
+				smallestNonConflictingIndex = index
+				break
+			}
+		}
+
+		// no a valid placement, return
+		if smallestNonConflictingIndex == -1 {
+			return nil
+		}
+
+		// We found the position for this suite, reserve it ...
+		startBit, endBit := suiteInfo.byteRangeForAllowedPositionIndex(smallestNonConflictingIndex)
+		if !mainLayout2.Reserve(startBit, endBit, true, cornerstone.SuiteName) {
+			panic("The position is supposed to be free !")
+		}
+		for _, startPos := range allowedPositions {
+			endPos := startPos + suiteInfo.CornerstoneLength
+
+			// we don't care if we get those bytes exclusively (hence requireFree=false), we just want to prevent
+			// future suites/cornerstone from using them as a primary position
+			secondaryLayout2.Reserve(startPos, endPos, false, cornerstone.SuiteName)
+		}
+		placedCornerstones2 = append(placedCornerstones2, &Cornerstone {
+			SuiteName: cornerstone.SuiteName,
+			Offset: startBit,
+			EndPos: endBit,
+		})
+
+		if verbose {
+			log.LLvl3("Attempting position", startBit, endBit, "for suite", cornerstone.SuiteName)
+		}
+
+		// filter the one we just placed
+		remainingCornerstones := make([]*Cornerstone, 0)
+		for _, c := range cornerstonesToPlace {
+			if c.SuiteName != cornerstone.SuiteName {
+				remainingCornerstones = append(remainingCornerstones, &Cornerstone{
+					SuiteName: c.SuiteName,
+					SuiteInfo: c.SuiteInfo,
+					EndPos:    c.EndPos,
+					Offset:    c.Offset,
+				})
+			}
+		}
+
+		// proceed recursively
+		res := placeCornerstonesHelper(mainLayout2, secondaryLayout2, remainingCornerstones, placedCornerstones2, verbose)
+		if res != nil {
+			// we found a solution, stop iterating
+			return res
+		}
+	}
+
+	return nil
+}
+
 // Writes cornerstone values to the first available entries of the ones assigned for use ciphersuites
-func (purb *Purb) placeCornerstones() ([]string, error) {
+func (purb *Purb) placeCornerstones() {
 
 	// To compute the "main layout", we use a secondary layout to keep track of things. It is discarded at the end, and only helps computing mainLayout.
 	// Two things to remember:
@@ -201,91 +293,40 @@ func (purb *Purb) placeCornerstones() ([]string, error) {
 	mainLayout.Reserve(0, AEAD_NONCE_LENGTH, true, "nonce")
 	secondaryLayout.Reserve(0, AEAD_NONCE_LENGTH, true, "nonce")
 
-	// we then sort the sortedCornerstones by their length
-	sortedCornerstones := make([]*Cornerstone, 0)
+	cornerstonesToPlace := make([]*Cornerstone, 0)
+	cornerstonesPlaced := make([]*Cornerstone, 0)
 	for _, cornerstone := range purb.Header.Cornerstones {
-		sortedCornerstones = append(sortedCornerstones, cornerstone)
+		cornerstonesToPlace = append(cornerstonesToPlace, cornerstone)
 	}
 
-	sortFunction := func(i, j int) bool {
-		if len(sortedCornerstones[i].Bytes) > len(sortedCornerstones[j].Bytes) {
-			return true
-		}
-		if len(sortedCornerstones[i].Bytes) == len(sortedCornerstones[j].Bytes) {
-			return sortedCornerstones[i].SuiteName < sortedCornerstones[j].SuiteName
-		}
-		return false
+	placedCornerstones := placeCornerstonesHelper(mainLayout, secondaryLayout, cornerstonesToPlace, cornerstonesPlaced, purb.IsVerbose)
+
+	if placedCornerstones == nil {
+		panic("Could not find a mapping for placing the cornerstone, who designed the AllowedPositions ?!")
 	}
 
-	sort.Slice(sortedCornerstones, sortFunction)
-
-	// we find the suite informations (in the same order as the cornerstones)
-	sortedSuites := make([]string, 0)
-	for _, cornerstone := range sortedCornerstones {
-		suiteInfo := purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName]
-		if suiteInfo == nil {
-			return nil, errors.New("we do not have suiteInfo about the needed suite")
-		}
-		sortedSuites = append(sortedSuites, cornerstone.SuiteName)
-	}
-
-	// for each cornerstone,
-	for index, cornerstone := range sortedCornerstones {
-
-		suiteInfo := purb.PublicParameters.SuiteInfoMap[sortedSuites[index]]
-		allowedPositions := suiteInfo.AllowedPositions
-
-		// find the first free position in the layout. We use the "secondaryLayout" since secondary positions are *not* free for other cornerstones !
-		smallestNonConflictingIndex := -1
-		for index, startPos := range allowedPositions {
-			endPos := startPos + suiteInfo.CornerstoneLength
-
-			if secondaryLayout.IsFree(startPos, endPos) {
-				smallestNonConflictingIndex = index
-				break
-			}
-		}
-
-		if smallestNonConflictingIndex == -1 {
-			return nil, errors.New("no viable position for suite " + cornerstone.SuiteName)
-		}
-
-		// We found the position for this suite, reserve it ...
-		startBit, endBit := suiteInfo.byteRangeForAllowedPositionIndex(smallestNonConflictingIndex)
-
-		// ... in the main layout
-		if !mainLayout.Reserve(startBit, endBit, true, cornerstone.SuiteName) {
-			panic("The position is supposed to be free !")
-		}
+	// for each cornerstone, register its position
+	for _, cornerstone := range placedCornerstones {
 
 		// ... in the cornerstone struct (which will be used when placing the entrypoints)
-		purb.Header.Cornerstones[cornerstone.SuiteName].Offset = startBit
-		purb.Header.Cornerstones[cornerstone.SuiteName].EndPos = endBit
+		purb.Header.Cornerstones[cornerstone.SuiteName].Offset = cornerstone.Offset
+		purb.Header.Cornerstones[cornerstone.SuiteName].EndPos = cornerstone.EndPos
+
+		if !mainLayout.Reserve(cornerstone.Offset, cornerstone.EndPos, true, cornerstone.SuiteName){
+			panic("I thought we had this position reserved")
+		}
 
 		if purb.IsVerbose {
-			log.LLvlf3("Found position for cornerstone %v, start %v, end %v", cornerstone.SuiteName, startBit, endBit)
-		}
-
-		// finally, reserve *all* possible position in the secondaryLayout. The final step of the PURB
-		// creation is to ensure that the XOR of those values equals the value of the cornerstone, so we must have some
-		// degree of freedom here, we can't place other cornerstones
-
-		for _, startPos := range allowedPositions {
-			endPos := startPos + suiteInfo.CornerstoneLength
-
-			// we don't care if we get those bytes exclusively (hence requireFree=false), we just want to prevent
-			// future suites/cornerstone from using them as a primary position
-			secondaryLayout.Reserve(startPos, endPos, false, cornerstone.SuiteName)
+			log.LLvlf3("Position for cornerstone %v is start %v, end %v", cornerstone.SuiteName, cornerstone.Offset, cornerstone.EndPos)
 		}
 	}
-
-	return sortedSuites, nil
 }
 
 // placeEntrypoints will find, place and reserve part of the header for the data
 // All hash tables start after their cornerstone.
-func (purb *Purb) placeEntrypoints(orderedSuites []string) {
-	for _, suite := range orderedSuites {
+func (purb *Purb) placeEntrypoints() {
+	for _, cornerstone := range purb.Header.Cornerstones {
+		suite := cornerstone.SuiteName
 		for entrypointID, entrypoint := range purb.Header.EntryPoints[suite] {
 
 			//hash table initialStartPos right after the cornerstone's offset-0
@@ -333,8 +374,10 @@ func (purb *Purb) placeEntrypoints(orderedSuites []string) {
 }
 
 // placeEntrypoints will findAllRangesStrictlyBefore, place and reserve part of the header for the data. Does not use a hash table, put the points linearly
-func (purb *Purb) placeEntrypointsSimplified(orderedSuites []string) {
-	for _, suite := range orderedSuites {
+func (purb *Purb) placeEntrypointsSimplified() {
+
+	for _, cornerstone := range purb.Header.Cornerstones {
+		suite := cornerstone.SuiteName
 		for entryPointID, entrypoint := range purb.Header.EntryPoints[suite] {
 			//hash table startPos right after the cornerstone's offset-0
 			startPos := purb.PublicParameters.SuiteInfoMap[suite].AllowedPositions[0] + purb.PublicParameters.SuiteInfoMap[suite].CornerstoneLength
@@ -540,11 +583,18 @@ func newEmptyHeader() *Header {
 }
 
 func (purb *Purb) newCornerStone(suiteName string, keyPair *key.Pair) *Cornerstone {
+
+	hiddenBytes := keyPair.Hiding.HideEncode(purb.Stream)
+	hiddenBytes2 := make([]byte, purb.PublicParameters.SuiteInfoMap[suiteName].CornerstoneLength)
+
+	// copy at the end
+	copy(hiddenBytes2[len(hiddenBytes2)-len(hiddenBytes):], hiddenBytes[:])
 	return &Cornerstone{
 		SuiteName: suiteName,
 		Offset:    -1,
 		KeyPair:   keyPair, // do not call Hiding.HideEncode on this! it has been done already. Use bytes
-		Bytes:     keyPair.Hiding.HideEncode(purb.Stream),
+		Bytes:     hiddenBytes2,
+		SuiteInfo: purb.PublicParameters.SuiteInfoMap[suiteName],
 	}
 }
 

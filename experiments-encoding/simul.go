@@ -10,10 +10,10 @@ import (
 	"strconv"
 )
 
-const REPEAT = 1
+const REPEAT = 20
 const PAYLOAD_SIZE = 1000 * 8
-const RECIPIENTS_STR = "1,10" //100,1000,10000"
-const SUITES_STR = "3,10"
+const RECIPIENTS_STR = "1,10,100" //100,1000,10000"
+const SUITES_STR = "1,3,10"
 
 func main() {
 	app := cli.NewApp()

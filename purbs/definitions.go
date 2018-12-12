@@ -18,9 +18,6 @@ const AEAD_NONCE_LENGTH = 12
 // Length (in bytes) of the MAC tag in the entry point (only used with entrypoints are encrypted with AEAD)
 const MAC_AUTHENTICATION_TAG_LENGTH = SYMMETRIC_KEY_LENGTH
 
-// Length (in bytes) of the Cornerstones (for simplicity assuming all suites HideLen is the same).
-const CORNERSTONE_LENGTH = 32
-
 // Structure to define the whole PURB
 type Purb struct {
 	PublicParameters *PurbPublicFixedParameters
@@ -81,6 +78,7 @@ type Cornerstone struct {
 	Offset    int    // Starting byte position in the header
 	EndPos    int    // Ending byte position in the header
 	Bytes     []byte // singleton. Since calling marshalling the KeyPair is non-deterministic, at least we do it only once so prints are consistents
+	SuiteInfo *SuiteInfo
 }
 
 //EntryPoint holds the info required to create an entrypoint for each recipient.

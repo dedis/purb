@@ -55,13 +55,21 @@ def plotHeaderSize():
 def plotHeaderCompactness():
 
     header_sizes = readAndProcess('compactness.json')
-    v = groupByKeyAndGetStats(header_sizes, key="nRecipients")
 
-    Xs = [x for x in v]
-    Ys = [1 - v[x]['mean2'] for x in v]
-    Yerr = [v[x]['err2'] for x in v]
+    grouped_by_suite = groupByKey(header_sizes, "nSuites")
 
-    plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[0], label="Compactness", marker=markers[0], linestyle=linestyles[0],capsize=2)
+    suite_counter = 0
+    for nsuite in grouped_by_suite:
+        data2 = grouped_by_suite[nsuite]
+        v = groupByKeyAndGetStats(data2, key="nRecipients")
+
+        Xs = [x for x in v]
+        Ys = [1 - v[x]['mean2'] for x in v]
+        Yerr = [v[x]['err2'] for x in v]
+
+        plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[suite_counter], label=nsuite, marker=markers[suite_counter], linestyle=linestyles[suite_counter],capsize=2)
+        suite_counter += 1
+
 
     plt.tick_params(axis='x', labelsize=16)
     plt.tick_params(axis='y', labelsize=16)
