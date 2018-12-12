@@ -273,7 +273,6 @@ func SimulMeasureHeaderSize(nRepeat int, numRecipients []int) string {
 				OriginalData:     nil,
 				PublicParameters: publicFixedParams,
 			}
-			p.PublicParameters.HashTableCollisionLinearResolutionAttempts = 3
 			p.CreateHeader()
 			value = float64(p.Header.Length())
 
@@ -282,8 +281,8 @@ func SimulMeasureHeaderSize(nRepeat int, numRecipients []int) string {
 	}
 
 	s := "{"
-	s += "\"purb-flat\": " + resultsPURBs.String()+","
-	s += "\"purb\": " + resultsFlat.String()
+	s += "\"purb\": " + resultsPURBs.String()+","
+	s += "\"purb-flat\": " + resultsFlat.String()
 	s += "}"
 	return s
 }

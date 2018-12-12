@@ -44,7 +44,7 @@ def plotHeaderSize():
     plt.tick_params(axis='y', labelsize=16)
     plt.legend()
     plt.xscale('log')
-    plt.yscale('log')
+    #plt.yscale('log')
     plt.ylabel('Header Size [B]')
     plt.xlabel('Number of Recipients')
     plt.grid(True, which="major", axis='both')
@@ -64,10 +64,10 @@ def plotHeaderCompactness():
         v = groupByKeyAndGetStats(data2, key="nRecipients")
 
         Xs = [x for x in v]
-        Ys = [1 - v[x]['mean2'] for x in v]
-        Yerr = [v[x]['err2'] for x in v]
+        Ys = [100 * (1 - v[x]['mean2']) for x in v]
+        Yerr = [100 * v[x]['err2'] for x in v]
 
-        plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[suite_counter], label=nsuite, marker=markers[suite_counter], linestyle=linestyles[suite_counter],capsize=2)
+        plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[suite_counter], label=str(nsuite)+" Suites", marker=markers[suite_counter], linestyle=linestyles[suite_counter],capsize=2)
         suite_counter += 1
 
 
@@ -75,8 +75,10 @@ def plotHeaderCompactness():
     plt.tick_params(axis='y', labelsize=16)
     plt.legend()
     plt.xscale('log')
-    plt.ylabel('Percentage of useful bits [\\%]')
+    plt.ylabel('Percentage of useful bits, \\%')
     plt.xlabel('Number of Recipients')
+    axes = plt.gca()
+    axes.set_ylim([0,105])
     plt.grid(True, which="major", axis='both')
     plt.axis()
     plt.show()
