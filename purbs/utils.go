@@ -104,9 +104,9 @@ func (si SuiteInfo) String() string {
 	for _, pos := range si.AllowedPositions {
 		s += strconv.Itoa(pos) + ", "
 	}
-	s = s[0: len(s)-2] + "}, "
-	s += "CSLen: "+strconv.Itoa(si.CornerstoneLength)
-	s += ", EPLen: "+strconv.Itoa(si.EntryPointLength)
+	s = s[0:len(s)-2] + "}, "
+	s += "CSLen: " + strconv.Itoa(si.CornerstoneLength)
+	s += ", EPLen: " + strconv.Itoa(si.EntryPointLength)
 
 	return s + "]"
 }

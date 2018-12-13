@@ -11,14 +11,13 @@ import (
 	"github.com/dedis/kyber/util/key"
 	"github.com/dedis/kyber/util/random"
 	"github.com/dedis/purbs/experiments-encoding/pgp"
-	"os"
 	"math/rand"
+	"os"
 	"time"
 )
 
 const simulationIsVerbose = false
 const simulationUsesSimplifiedLayout = false
-
 
 // SimulMeasureEncodingTimePrecise
 func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int) string {
@@ -43,7 +42,6 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 				si := createMultiInfo(nSuites)
 				recipients := createMultiDecoders(nRecipients, nSuites, si)
 				publicFixedParams := NewPublicFixedParameters(si, false)
-
 
 				// a bit ugly, but we have to copy-paste code here (or make everything public in the PURB folder)
 				purb := &Purb{
@@ -104,11 +102,11 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 	}
 
 	s := "{"
-	s += "\"asym-crypto\": " + resultsPKGen.String()+","
-	s += "\"kdfs\": " + resultsKDFs.String()+","
-	s += "\"placement\": " + resultsEPPlace.String()+","
-	s += "\"payload\": " + resultsPayload.String()+","
-	s += "\"cs-ep-values\": " + resultsCSAndEPValues.String()+","
+	s += "\"asym-crypto\": " + resultsPKGen.String() + ","
+	s += "\"kdfs\": " + resultsKDFs.String() + ","
+	s += "\"placement\": " + resultsEPPlace.String() + ","
+	s += "\"payload\": " + resultsPayload.String() + ","
+	s += "\"cs-ep-values\": " + resultsCSAndEPValues.String() + ","
 	s += "\"byte-map\": " + resultsMapToBytes.String()
 	s += "}"
 
@@ -213,9 +211,9 @@ func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) strin
 	}
 
 	s := "{"
-	s += "\"pgp\": " + resultsPGP.String()+","
-	s += "\"pgp-hidden\": " + resultsPGPHidden.String()+","
-	s += "\"purb-flat\": " + resultsPURBFlat.String()+","
+	s += "\"pgp\": " + resultsPGP.String() + ","
+	s += "\"pgp-hidden\": " + resultsPGPHidden.String() + ","
+	s += "\"purb-flat\": " + resultsPURBFlat.String() + ","
 	s += "\"purb\": " + resultsPURB.String()
 	s += "}"
 	return s
@@ -281,7 +279,7 @@ func SimulMeasureHeaderSize(nRepeat int, numRecipients []int) string {
 	}
 
 	s := "{"
-	s += "\"purb\": " + resultsPURBs.String()+","
+	s += "\"purb\": " + resultsPURBs.String() + ","
 	s += "\"purb-flat\": " + resultsFlat.String()
 	s += "}"
 	return s
@@ -320,7 +318,7 @@ func SimulDecode(nRepeat int, payloadLength int, nRecipients []int) string {
 				log.Fatal(err)
 			}
 			// sanity check
-			for i := 0; i<len(recipients); i+=step {
+			for i := 0; i < len(recipients); i += step {
 				m.reset()
 				dec, err := recipients[i].Decrypt(enc)
 				resultsPGP.add(i, nSuites, k, nRecipients, -1, nRepeat, m.record())
@@ -330,7 +328,7 @@ func SimulDecode(nRepeat int, payloadLength int, nRecipients []int) string {
 				if !bytes.Equal(dec, msg) {
 					panic("PGP did not decrypt correctly")
 				}
-				if i % 1 == 0 {
+				if i%1 == 0 {
 					l.Println("PGP Decrypting", i, "/", len(recipients))
 				}
 			}
@@ -341,17 +339,17 @@ func SimulDecode(nRepeat int, payloadLength int, nRecipients []int) string {
 				log.Fatal(err)
 			}
 			// sanity check
-			for i := 0; i<len(recipients); i+=step {
+			for i := 0; i < len(recipients); i += step {
 				m.reset()
 				dec, err := recipients[i].Decrypt(enc)
 				resultsPGPHidden.add(i, nSuites, k, nRecipients, -1, nRepeat, m.record())
 				if err != nil {
-				log.Fatal(err)
+					log.Fatal(err)
 				}
 				if !bytes.Equal(dec, msg) {
-				panic("PGP-Hidden did not decrypt correctly")
+					panic("PGP-Hidden did not decrypt correctly")
 				}
-				if i % 1 == 0 {
+				if i%1 == 0 {
 					l.Println("PGP-Hidden Decrypting", i, "/", len(recipients))
 				}
 			}
@@ -367,7 +365,7 @@ func SimulDecode(nRepeat int, payloadLength int, nRecipients []int) string {
 				panic(err.Error())
 			}
 			// sanity check
-			for i := 0; i<len(recipients); i+=step {
+			for i := 0; i < len(recipients); i += step {
 				m.reset()
 				success, out, err := Decode(blob, &decs[i], publicFixedParams, simulationIsVerbose)
 				resultsPURBFlat.add(i, nSuites, k, nRecipients, -1, nRepeat, m.record())
@@ -377,7 +375,7 @@ func SimulDecode(nRepeat int, payloadLength int, nRecipients []int) string {
 				if err != nil {
 					panic(err.Error())
 				}
-				if i % 1 == 0 {
+				if i%1 == 0 {
 					l.Println("PURB-Flat Decrypting", i, "/", len(recipients))
 				}
 			}
@@ -393,7 +391,7 @@ func SimulDecode(nRepeat int, payloadLength int, nRecipients []int) string {
 				panic(err.Error())
 			}
 
-			for i := 0; i<len(recipients); i+=step {
+			for i := 0; i < len(recipients); i += step {
 				m.reset()
 				success, out, err := Decode(blob, &decs[i], publicFixedParams, simulationIsVerbose)
 				resultsPURB.add(i, nSuites, k, nRecipients, -1, nRepeat, m.record())
@@ -403,7 +401,7 @@ func SimulDecode(nRepeat int, payloadLength int, nRecipients []int) string {
 				if err != nil {
 					panic(err.Error())
 				}
-				if i % 1 == 0 {
+				if i%1 == 0 {
 					l.Println("PURB Decrypting", i, "/", len(recipients))
 				}
 			}
@@ -424,7 +422,6 @@ func SimulMeasureHeaderCompactness(nRepeat int, recipients []int, suites []int) 
 	l := log.New(os.Stderr, "", 0)
 
 	resultsPURBs := new(Results)
-
 
 	key := make([]byte, SYMMETRIC_KEY_LENGTH)
 	nonce := make([]byte, AEAD_NONCE_LENGTH)
@@ -499,7 +496,7 @@ func createDecoders(n int) []Recipient {
 func shiftByAEAD_NONCE_LENGTH(pos []int) []int {
 	res := make([]int, len(pos))
 
-	for i:=0; i<len(pos); i++ {
+	for i := 0; i < len(pos); i++ {
 		res[i] = AEAD_NONCE_LENGTH + pos[i]
 	}
 
@@ -516,38 +513,37 @@ func createMultiInfoReal(N int) SuiteInfoMap {
 	// PURB_E, cornerstone size 64, ep size 64, pos 0, 64, 128, 192
 	// PURB_F, cornerstone size 32, ep size 64, pos 0, 32, 64, 96, 128, 256
 
-
 	info := make(SuiteInfoMap)
 
 	info["PURB_A"] = &SuiteInfo{
-		AllowedPositions: shiftByAEAD_NONCE_LENGTH([]int{0}),
-		CornerstoneLength:  64,
-		EntryPointLength: 48,
+		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0}),
+		CornerstoneLength: 64,
+		EntryPointLength:  48,
 	}
 	info["PURB_B"] = &SuiteInfo{
-		AllowedPositions: shiftByAEAD_NONCE_LENGTH([]int{0, 64}),
-		CornerstoneLength:  32,
-		EntryPointLength: 48,
+		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 64}),
+		CornerstoneLength: 32,
+		EntryPointLength:  48,
 	}
 	info["PURB_C"] = &SuiteInfo{
-		AllowedPositions: shiftByAEAD_NONCE_LENGTH([]int{0, 64, 96}),
-		CornerstoneLength:  64,
-		EntryPointLength: 80,
+		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 64, 96}),
+		CornerstoneLength: 64,
+		EntryPointLength:  80,
 	}
 	info["PURB_D"] = &SuiteInfo{
-		AllowedPositions: shiftByAEAD_NONCE_LENGTH([]int{0, 32, 64, 160}),
-		CornerstoneLength:  32,
-		EntryPointLength: 80,
+		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 32, 64, 160}),
+		CornerstoneLength: 32,
+		EntryPointLength:  80,
 	}
 	info["PURB_E"] = &SuiteInfo{
-		AllowedPositions: shiftByAEAD_NONCE_LENGTH([]int{0, 64, 128, 192}),
-		CornerstoneLength:  64,
-		EntryPointLength: 64,
+		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 64, 128, 192}),
+		CornerstoneLength: 64,
+		EntryPointLength:  64,
 	}
 	info["PURB_F"] = &SuiteInfo{
-		AllowedPositions: shiftByAEAD_NONCE_LENGTH([]int{0, 32, 64, 96, 128, 256}),
-		CornerstoneLength:  32,
-		EntryPointLength: 64,
+		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 32, 64, 96, 128, 256}),
+		CornerstoneLength: 32,
+		EntryPointLength:  64,
 	}
 
 	keys := make([]string, 0)
@@ -584,7 +580,7 @@ func createMultiInfo(N int) SuiteInfoMap {
 	}
 	for i := 0; i < N; i++ {
 		info[curve25519.NewBlakeSHA256Curve25519(true).String()+suffixes[i]] = &SuiteInfo{
-			AllowedPositions: positions[i], CornerstoneLength: cornerstoneLen, EntryPointLength:entryPointLen}
+			AllowedPositions: positions[i], CornerstoneLength: cornerstoneLen, EntryPointLength: entryPointLen}
 	}
 
 	return info
@@ -662,19 +658,22 @@ func simulGetRandomBytes(length int) []byte {
 	random.Bytes(buffer, random.New())
 	return buffer
 }
+
+// ResultRow contains data about one sample of one experiment
 type ResultRow struct {
-	nRecipients int
+	nRecipients      int
 	totalNRecipients int
 
-	nSuites int
+	nSuites      int
 	totalNSuites int
 
-	nRepeat int
+	nRepeat      int
 	totalNRepeat int
 
 	value float64
 }
 
+// Results is a collection of ResultRow's
 type Results struct {
 	rows []*ResultRow
 }

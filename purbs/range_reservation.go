@@ -29,8 +29,8 @@ func (r *RegionReservationStruct) Clone() *RegionReservationStruct {
 	for _, region := range r.regions {
 		r2.regions = append(r2.regions, &Region{
 			startPos: region.startPos,
-			endPos: region.endPos,
-			label: region.label,
+			endPos:   region.endPos,
+			label:    region.label,
 		})
 	}
 
@@ -38,8 +38,8 @@ func (r *RegionReservationStruct) Clone() *RegionReservationStruct {
 	for _, region := range r.coalescedRegions {
 		r2.coalescedRegions = append(r2.coalescedRegions, &Region{
 			startPos: region.startPos,
-			endPos: region.endPos,
-			label: region.label,
+			endPos:   region.endPos,
+			label:    region.label,
 		})
 	}
 

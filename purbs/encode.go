@@ -160,7 +160,7 @@ func (purb *Purb) createEntryPoints() {
 			Recipient:    recipient,
 			SharedSecret: sharedSecret,
 			Offset:       -1,
-			Length: purb.PublicParameters.SuiteInfoMap[recipient.SuiteName].EntryPointLength,
+			Length:       purb.PublicParameters.SuiteInfoMap[recipient.SuiteName].EntryPointLength,
 		}
 
 		// store entrypoint
@@ -195,11 +195,11 @@ func placeCornerstonesHelper(
 		// prepare datastructure for recursion, do deep copies
 		placedCornerstones2 := make([]*Cornerstone, 0)
 		for _, c := range placedCornerstones {
-			placedCornerstones2 = append(placedCornerstones2, &Cornerstone {
+			placedCornerstones2 = append(placedCornerstones2, &Cornerstone{
 				SuiteName: c.SuiteName,
 				SuiteInfo: c.SuiteInfo,
-				EndPos: c.EndPos,
-				Offset: c.Offset,
+				EndPos:    c.EndPos,
+				Offset:    c.Offset,
 			})
 		}
 		mainLayout2 := mainLayout.Clone()
@@ -238,10 +238,10 @@ func placeCornerstonesHelper(
 			// future suites/cornerstone from using them as a primary position
 			secondaryLayout2.Reserve(startPos, endPos, false, cornerstone.SuiteName)
 		}
-		placedCornerstones2 = append(placedCornerstones2, &Cornerstone {
+		placedCornerstones2 = append(placedCornerstones2, &Cornerstone{
 			SuiteName: cornerstone.SuiteName,
-			Offset: startBit,
-			EndPos: endBit,
+			Offset:    startBit,
+			EndPos:    endBit,
 		})
 
 		if verbose {
@@ -312,7 +312,7 @@ func (purb *Purb) placeCornerstones() {
 		purb.Header.Cornerstones[cornerstone.SuiteName].Offset = cornerstone.Offset
 		purb.Header.Cornerstones[cornerstone.SuiteName].EndPos = cornerstone.EndPos
 
-		if !mainLayout.Reserve(cornerstone.Offset, cornerstone.EndPos, true, cornerstone.SuiteName){
+		if !mainLayout.Reserve(cornerstone.Offset, cornerstone.EndPos, true, cornerstone.SuiteName) {
 			panic("I thought we had this position reserved")
 		}
 
@@ -347,8 +347,8 @@ func (purb *Purb) placeEntrypoints() {
 				for j := 0; j < purb.PublicParameters.HashTableCollisionLinearResolutionAttempts; j++ {
 					posInHashTable = (intOfHashedValue + j) % tableSize
 
-					effectiveStartPos := initialStartPos + posInHashTable * entrypoint.Length
-					effectiveEndPos := initialStartPos + (posInHashTable+1) * entrypoint.Length
+					effectiveStartPos := initialStartPos + posInHashTable*entrypoint.Length
+					effectiveEndPos := initialStartPos + (posInHashTable+1)*entrypoint.Length
 
 					if purb.Header.Layout.Reserve(effectiveStartPos, effectiveEndPos, true, "hash"+strconv.Itoa(tableSize)) {
 						purb.Header.EntryPoints[suite][entrypointID].Offset = effectiveStartPos
@@ -576,9 +576,9 @@ func (purb *Purb) randomBytes(length int) []byte {
 
 func newEmptyHeader() *Header {
 	return &Header{
-		EntryPoints:      make(map[string][]*EntryPoint),
-		Cornerstones:     make(map[string]*Cornerstone),
-		Layout:           NewRegionReservationStruct(),
+		EntryPoints:  make(map[string][]*EntryPoint),
+		Cornerstones: make(map[string]*Cornerstone),
+		Layout:       NewRegionReservationStruct(),
 	}
 }
 
@@ -611,7 +611,7 @@ func (h *Header) Length() int {
 
 	for _, entryPoints := range h.EntryPoints {
 		for _, entrypoint := range entryPoints {
-			if length < entrypoint.Offset + entrypoint.Length {
+			if length < entrypoint.Offset+entrypoint.Length {
 				length = entrypoint.Offset + entrypoint.Length
 			}
 		}

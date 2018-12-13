@@ -92,8 +92,8 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 		for j := 0; j < hashTableLinearResolutionCollisionAttempt; j++ {
 			entrypointIndexInHashTable = (intOfHashedValue + j) % tableSize
 
-			entrypointStartPos := hashTableStartPos + entrypointIndexInHashTable * suiteInfo.EntryPointLength
-			entrypointEndPos := hashTableStartPos + (entrypointIndexInHashTable+1) * suiteInfo.EntryPointLength
+			entrypointStartPos := hashTableStartPos + entrypointIndexInHashTable*suiteInfo.EntryPointLength
+			entrypointEndPos := hashTableStartPos + (entrypointIndexInHashTable+1)*suiteInfo.EntryPointLength
 
 			if entrypointEndPos > len(data) {
 				// we're outside the hash table (even outside the blob!), so this j isn't valid
@@ -123,7 +123,7 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 		}
 
 		hashTableStartPos += tableSize * suiteInfo.EntryPointLength
-		entrypointEndPos := hashTableStartPos + (entrypointIndexInHashTable+1) * suiteInfo.EntryPointLength
+		entrypointEndPos := hashTableStartPos + (entrypointIndexInHashTable+1)*suiteInfo.EntryPointLength
 		tableSize *= 2
 
 		if entrypointEndPos > len(data) {
@@ -138,8 +138,8 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, verbose bool) (bool, []byte, error) {
 	startPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
-	for startPos + suiteInfo.EntryPointLength < len(data) {
-		entrypointBytes := data[startPos : startPos + suiteInfo.EntryPointLength]
+	for startPos+suiteInfo.EntryPointLength < len(data) {
+		entrypointBytes := data[startPos : startPos+suiteInfo.EntryPointLength]
 
 		xof := recipient.Suite.XOF(sharedSecret)
 		decrypted := make([]byte, suiteInfo.EntryPointLength)

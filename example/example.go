@@ -54,7 +54,7 @@ func main() {
 
 func getDummySuiteInfo() purbs.SuiteInfoMap {
 	info := make(purbs.SuiteInfoMap)
-	cornerstoneLength := purbs.CORNERSTONE_LENGTH
+	cornerstoneLength := 64
 	info[curve25519.NewBlakeSHA256Curve25519(true).String()] = &purbs.SuiteInfo{
 		AllowedPositions: []int{12 + 0*cornerstoneLength, 12 + 1*cornerstoneLength, 12 + 3*cornerstoneLength, 12 + 4*cornerstoneLength},
 		CornerstoneLength: cornerstoneLength}

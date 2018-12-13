@@ -60,14 +60,14 @@ type SuiteInfoMap map[string]*SuiteInfo
 type SuiteInfo struct {
 	AllowedPositions  []int // alternative PayloadKey/point position in purb header
 	CornerstoneLength int   // length of each PayloadKey/point in bytes
-	EntryPointLength int                      // Length of each encrypted entry point
+	EntryPointLength  int   // Length of each encrypted entry point
 }
 
 // Structure defining the actual header of a purb
 type Header struct {
-	EntryPoints      map[string][]*EntryPoint // map of suiteName -> []entrypoints
-	Cornerstones     map[string]*Cornerstone  // Holds sender's ephemeral private/public keys for each suite in the header
-	Layout           *RegionReservationStruct // An array of byte slices where each of the bytes slice represents a hash table entry
+	EntryPoints  map[string][]*EntryPoint // map of suiteName -> []entrypoints
+	Cornerstones map[string]*Cornerstone  // Holds sender's ephemeral private/public keys for each suite in the header
+	Layout       *RegionReservationStruct // An array of byte slices where each of the bytes slice represents a hash table entry
 }
 
 // Ephemeral Diffie-Hellman keys for all PayloadKey-holders using this suite.
