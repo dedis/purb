@@ -22,7 +22,7 @@ def plotHeaderSize():
     header_sizes = readAndProcessTwoLevels('header_sizes.json')
 
     labels = {}
-    labels['purb-flat'] = 'PURBs (no GHT)'
+    labels['purb-flat'] = 'PURBs flat'
     labels['purb'] = 'PURBs'
     i = 0
     for header_sizes_type in header_sizes:
