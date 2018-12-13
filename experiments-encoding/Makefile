@@ -1,7 +1,7 @@
 .PHONY: install simul clean plot-encode plot-encode-precise plot-decode plot-header-size plot-header-compactness
 
 install:
-    pip install -r requirements.txt
+	pip install -r requirements.txt
 
 simul:
 	go run -tags=vartime simul.go e > encode.json
