@@ -1,7 +1,4 @@
 #!/usr/bin/python3
-import json
-from pprint import pprint
-from math import sqrt
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -9,20 +6,20 @@ import numpy as np
 import sys
 from utils import *
 
+# colors and constants
 colors = ['#0000FF', '#FF0000', '#800080', '#1E90FF', '#8A2BE2', '#FFA500', '#00FF00', '#F0F0F0']
 fillcolors = [c + "AA" for c in colors]
-
 markers = ['D', 'x', 'o', 'd']
 linestyles = ['--', ':', '-', '-.']
 patterns = ['', '.', '//']
-
 mpl.rcParams['text.latex.preamble'] = [r'\usepackage{sansmath}', r'\sansmath']
 mpl.rcParams['text.usetex'] = True
 mpl.rcParams.update({'font.size': 16})
 
+
 def plotHeaderSize():
 
-    header_sizes = readAndProcess2('header_sizes.json')
+    header_sizes = readAndProcessTwoLevels('header_sizes.json')
 
     labels = {}
     labels['purb-flat'] = 'PURBs (no GHT)'
@@ -85,7 +82,7 @@ def plotHeaderCompactness():
 
 
 def plotDecodeTime():
-    decode = readAndProcess2('decode.json')
+    decode = readAndProcessTwoLevels('decode.json')
 
     i = 0
     for decode_type in decode:
@@ -114,7 +111,7 @@ def plotDecodeTime():
     plt.show()
 
 def plotEncodingTime():
-    encode = readAndProcess2('encode.json')
+    encode = readAndProcessTwoLevels('encode.json')
 
     labels = {}
     labels['pgp'] = 'PGP'
@@ -153,7 +150,7 @@ def plotEncodingTime():
     plt.show()
 
 def plotEncodingPrecise():
-    encode = readAndProcess2('encode_precise.json')
+    encode = readAndProcessTwoLevels('encode_precise.json')
 
     labels = {}
     labels['cs-ep-values'] = 'EP+CS Creation'
@@ -239,14 +236,12 @@ def plotEncodingPrecise():
     plt.xlabel('Number of Recipients')
     plt.yscale('log')
     plt.grid(True, which="major", axis='y')
-    axes = plt.gca()
-    #axes.set_ylim([0,100])
 
     legends = []
     i = 0
     for encode_type in order:
-        dataserie = mpatches.Patch(facecolor=fillcolors[i], edgecolor='black', label=labels[encode_type])
-        legends.append(dataserie)
+        data_serie = mpatches.Patch(facecolor=fillcolors[i], edgecolor='black', label=labels[encode_type])
+        legends.append(data_serie)
         i += 1
 
     i = 0
@@ -254,8 +249,8 @@ def plotEncodingPrecise():
         l = str(nSuites[i]) + ' suite'
         if nSuites[i] != 1:
             l+='s'
-        dataserie = mpatches.Patch(facecolor='white', edgecolor='black', hatch=patterns[i], label=l)
-        legends.append(dataserie)
+        data_serie = mpatches.Patch(facecolor='white', edgecolor='black', hatch=patterns[i], label=l)
+        legends.append(data_serie)
         i += 1
 
     plt.legend(handles=legends, ncol=2, fontsize=13,labelspacing=0.2, columnspacing=1)
@@ -263,7 +258,7 @@ def plotEncodingPrecise():
     plt.show()
 
 if len(sys.argv) == 1:
-    print("Usage: ./plot.py e|p|h|d")
+    print("Usage: ./plot.py e|d|h|c|p, for Encode,Decode,HeaderSize,Compactness,encode Precise(stacked bars)")
 else:
     if sys.argv[1] == 'e':
         plotEncodingTime()

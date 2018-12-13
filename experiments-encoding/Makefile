@@ -1,4 +1,7 @@
-.PHONY: simul clean
+.PHONY: install simul clean plot-encode plot-encode-precise plot-decode plot-header-size plot-header-compactness
+
+install:
+    pip install -r requirements.txt
 
 simul:
 	go run -tags=vartime simul.go e > encode.json
@@ -7,8 +10,20 @@ simul:
 	go run -tags=vartime simul.go p > encode_precise.json
 	go run -tags=vartime simul.go c > compactness.json
 
-plot:
-	python3 plot.py
+plot-encode:
+	python3 plot.py e
+
+plot-encode-precise:
+	python3 plot.py p
+
+plot-decode:
+	python3 plot.py d
+
+plot-header-size:
+	python3 plot.py h
+
+plot-header-compactness:
+	python3 plot.py c
 
 clean:
 	rm -f *.json

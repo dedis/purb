@@ -1,12 +1,72 @@
 #!/usr/bin/python3
 import json
-from pprint import pprint
 from math import sqrt
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import numpy as np
-import sys
+
+
+def readAndProcess(file):
+    data = []
+    with open(file) as f:
+        data = json.load(f)
+    return process(data)
+
+def readAndProcessTwoLevels(file):
+    data = []
+    with open(file) as f:
+        data = json.load(f)
+
+    data2 = {}
+    for data_type in data:
+        data2[data_type] = process(data[data_type])
+
+    return data2
+
+def process(data):
+    # remove non-data
+    data2 = []
+    for line in data:
+        line2 = {}
+        for key in line:
+            if line[key] != "-1" and line[key] != -1:
+                if key == "value":
+                    line2[key] = float(line[key])
+                else:
+                    line2[key] = int(line[key])
+        data2.append(line2)
+
+    return data2
+
+def groupByKey(data, key):
+    grouped_per_key = {}
+    for line in data:
+        n_recipients = line[key]
+        if n_recipients not in grouped_per_key:
+            grouped_per_key[n_recipients] = []
+        grouped_per_key[n_recipients].append(line)
+
+    return grouped_per_key
+
+def groupByKeyAndGetStats(data, key):
+    grouped_per_key = groupByKey(data, key)
+
+    results = {}
+    for group in grouped_per_key:
+        values = [x['value'] for x in grouped_per_key[group]]
+        results[group] = stats(values)
+    return results
+
+
+def stats(data):
+    s = dict()
+    s['mean'] = mean(data)
+    s['err'] = percentile(data)
+    s['min'] = min(data)
+    s['max'] = max(data)
+    s['count'] = len(data)
+    a =mean_and_deviation(data)
+    s['mean2'] = a[0]
+    s['err2'] = a[1]
+    return s
 
 def arr_sum(data):
     acc = 0.0
@@ -42,77 +102,3 @@ def mean_and_deviation(elems):
     dev = a.std()
     mean = a.mean()
     return mean, dev
-
-def stats(data):
-    s = {}
-    s['mean'] = mean(data)
-    s['err'] = percentile(data)
-    s['min'] = min(data)
-    s['max'] = max(data)
-    s['count'] = len(data)
-    a =mean_and_deviation(data)
-    s['mean2'] = a[0]
-    s['err2'] = a[1]
-    return s
-
-def process(data):
-    # remove non-data
-    data2 = []
-    for line in data:
-        line2 = {}
-        for key in line:
-            if line[key] != "-1" and line[key] != -1:
-                if key == "value":
-                    line2[key] = float(line[key])
-                else:
-                    line2[key] = int(line[key])
-        data2.append(line2)
-
-    return data2
-
-
-def readAndProcess(file):
-    data = []
-    with open(file) as f:
-        data = json.load(f)
-    return process(data)
-
-def readAndProcess2(file):
-    data = []
-    with open(file) as f:
-        data = json.load(f)
-
-    data2 = {}
-    for data_type in data:
-        data2[data_type] = process(data[data_type])
-
-    return data2
-
-def groupByNSuites(data):
-    grouped_per_suite = {}
-    for line in data:
-        n_suite = line['nSuites']
-        if n_suite not in grouped_per_suite:
-            grouped_per_suite[n_suite] = []
-        grouped_per_suite[n_suite].append(line)
-
-    return grouped_per_suite
-
-def groupByKey(data, key):
-    grouped_per_key = {}
-    for line in data:
-        n_recipients = line[key]
-        if n_recipients not in grouped_per_key:
-            grouped_per_key[n_recipients] = []
-        grouped_per_key[n_recipients].append(line)
-
-    return grouped_per_key
-
-def groupByKeyAndGetStats(data, key):
-    grouped_per_key = groupByKey(data, key)
-
-    results = {}
-    for group in grouped_per_key:
-        values = [x['value'] for x in grouped_per_key[group]]
-        results[group] = stats(values)
-    return results
