@@ -40,7 +40,14 @@ for suite in SUITES:
     nextFreeIndex += SUITES[suite]['cornerstone_len']
     limit += 1
 
+    # backtrack, make sure the solution n-1 does not overlap with the exclusive solution
+    if len(suites_allowed_positions[suite]) >= 2:
+        l = len(suites_allowed_positions[suite])
+        before_last = suites_allowed_positions[suite][l-2]
+        last = suites_allowed_positions[suite][l-1]
 
+        if before_last + SUITES[suite]['cornerstone_len'] >= last:
+            del suites_allowed_positions[suite][l-2]
 
 print()
 print("Per suite:")
@@ -79,8 +86,7 @@ print("Sanity check, trying to place them all")
 
 def place(allowed_positions, suites_to_place, solution = dict()):
     if len(suites_to_place) == 0:
-        print(solution)
-        return True
+        return solution
 
     suite_to_place = suites_to_place[0]
 
@@ -112,16 +118,20 @@ def place(allowed_positions, suites_to_place, solution = dict()):
         #print("to_place", to_place)
         #print("filtered_positions", filtered_positions)
 
-        if place(filtered_positions, to_place, solution):
-            return True
+        res = place(filtered_positions, to_place, solution)
+        
+        if res is not None:
+            return res
 
-    return False
+    return None
 
 for n_suites in range(1, len(SUITES)):
     for subset in itertools.combinations(SUITES, n_suites+1):
-        print("Trying to place", subset)
-        if not place(suites_allowed_positions, subset, dict()):
-            print("Could not find a mapping !!!")
+        solution = place(suites_allowed_positions, subset, dict())
+        if solution is None:
+            print("Could not find a mapping for", subset)
             sys.exit(1)
+        else:
+            print("Placing", subset, "solution is", solution)
 
 print("OK")
