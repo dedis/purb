@@ -31,7 +31,7 @@ def plot_num_recipients():
     plt.loglog(Xs, [i[0] for i in purbsi], color='#077C0F', label='PURBs flat', marker='*')
     plt.fill_between(Xs, [i[0] - i[1] for i in purbsi], [i[0] + i[1] for i in purbsi], facecolor='#D4FFE3')
 
-    plt.loglog(Xs, [i[0] for i in purb], color='#BC220A', label='PURBs final', marker='s')
+    plt.loglog(Xs, [i[0] for i in purb], color='#BC220A', label='PURBs standard', marker='s')
     plt.fill_between(Xs, [i[0] - i[1] for i in purb], [i[0] + i[1] for i in purb], facecolor='#FFDFD1')
 
     # plt.legend(loc='lower right', shadow=True)
