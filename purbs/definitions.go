@@ -18,9 +18,6 @@ const AEAD_NONCE_LENGTH = 12
 // Length (in bytes) of the MAC tag in the entry point (only used with entrypoints are encrypted with AEAD)
 const MAC_AUTHENTICATION_TAG_LENGTH = SYMMETRIC_KEY_LENGTH
 
-// Length (in bytes) of the Cornerstones (for simplicity assuming all suites HideLen is the same).
-const CORNERSTONE_LENGTH = 32
-
 // Structure to define the whole PURB
 type Purb struct {
 	PublicParameters *PurbPublicFixedParameters
@@ -63,14 +60,14 @@ type SuiteInfoMap map[string]*SuiteInfo
 type SuiteInfo struct {
 	AllowedPositions  []int // alternative PayloadKey/point position in purb header
 	CornerstoneLength int   // length of each PayloadKey/point in bytes
+	EntryPointLength  int   // Length of each encrypted entry point
 }
 
 // Structure defining the actual header of a purb
 type Header struct {
-	EntryPoints      map[string][]*EntryPoint // map of suiteName -> []entrypoints
-	Cornerstones     map[string]*Cornerstone  // Holds sender's ephemeral private/public keys for each suite in the header
-	Layout           *RegionReservationStruct // An array of byte slices where each of the bytes slice represents a hash table entry
-	EntryPointLength int                      // Length of each encrypted entry point
+	EntryPoints  map[string][]*EntryPoint // map of suiteName -> []entrypoints
+	Cornerstones map[string]*Cornerstone  // Holds sender's ephemeral private/public keys for each suite in the header
+	Layout       *RegionReservationStruct // An array of byte slices where each of the bytes slice represents a hash table entry
 }
 
 // Ephemeral Diffie-Hellman keys for all PayloadKey-holders using this suite.
@@ -81,6 +78,7 @@ type Cornerstone struct {
 	Offset    int    // Starting byte position in the header
 	EndPos    int    // Ending byte position in the header
 	Bytes     []byte // singleton. Since calling marshalling the KeyPair is non-deterministic, at least we do it only once so prints are consistents
+	SuiteInfo *SuiteInfo
 }
 
 //EntryPoint holds the info required to create an entrypoint for each recipient.
@@ -88,6 +86,7 @@ type EntryPoint struct {
 	Recipient    Recipient // Recipient whom this entrypoint is for
 	SharedSecret []byte    // Ephemeral secret derived from negotiated DH secret
 	Offset       int       // Starting byte position in the header
+	Length       int
 }
 
 // Recipient holds information needed to be able to encrypt anything for it

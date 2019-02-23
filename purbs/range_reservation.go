@@ -20,6 +20,32 @@ func NewRegionReservationStruct() *RegionReservationStruct {
 	return layout
 }
 
+// Deep-clone structure
+func (r *RegionReservationStruct) Clone() *RegionReservationStruct {
+
+	r2 := NewRegionReservationStruct()
+
+	r2.regions = make([]*Region, 0)
+	for _, region := range r.regions {
+		r2.regions = append(r2.regions, &Region{
+			startPos: region.startPos,
+			endPos:   region.endPos,
+			label:    region.label,
+		})
+	}
+
+	r2.coalescedRegions = make([]*Region, 0)
+	for _, region := range r.coalescedRegions {
+		r2.coalescedRegions = append(r2.coalescedRegions, &Region{
+			startPos: region.startPos,
+			endPos:   region.endPos,
+			label:    region.label,
+		})
+	}
+
+	return r2
+}
+
 // Reset marks all regions as free
 func (r *RegionReservationStruct) Reset() {
 	r.regions = make([]*Region, 0)

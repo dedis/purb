@@ -35,6 +35,9 @@ func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 				endPos = len(data)
 			}
 		}
+		if endPos > len(data) {
+			endPos = len(data)
+		}
 		cornerstoneBytes := data[startPos:endPos]
 
 		if verbose {
@@ -75,8 +78,6 @@ func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 
 func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, hashTableLinearResolutionCollisionAttempt int, verbose bool) (bool, []byte, error) {
 
-	entrypointLength := SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
-
 	hash := sha256.New()
 	hash.Write(sharedSecret)
 	intOfHashedValue := int(binary.BigEndian.Uint32(hash.Sum(nil))) // Large number to become a position
@@ -91,8 +92,8 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 		for j := 0; j < hashTableLinearResolutionCollisionAttempt; j++ {
 			entrypointIndexInHashTable = (intOfHashedValue + j) % tableSize
 
-			entrypointStartPos := hashTableStartPos + entrypointIndexInHashTable*entrypointLength
-			entrypointEndPos := hashTableStartPos + (entrypointIndexInHashTable+1)*entrypointLength
+			entrypointStartPos := hashTableStartPos + entrypointIndexInHashTable*suiteInfo.EntryPointLength
+			entrypointEndPos := hashTableStartPos + (entrypointIndexInHashTable+1)*suiteInfo.EntryPointLength
 
 			if entrypointEndPos > len(data) {
 				// we're outside the hash table (even outside the blob!), so this j isn't valid
@@ -101,7 +102,7 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 
 			xof := recipient.Suite.XOF(sharedSecret)
 
-			decrypted := make([]byte, entrypointLength)
+			decrypted := make([]byte, suiteInfo.EntryPointLength)
 			xof.XORKeyStream(decrypted, data[entrypointStartPos:entrypointEndPos])
 
 			if verbose {
@@ -121,8 +122,8 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 			}
 		}
 
-		hashTableStartPos += tableSize * entrypointLength
-		entrypointEndPos := hashTableStartPos + entrypointIndexInHashTable*entrypointLength + entrypointLength
+		hashTableStartPos += tableSize * suiteInfo.EntryPointLength
+		entrypointEndPos := hashTableStartPos + (entrypointIndexInHashTable+1)*suiteInfo.EntryPointLength
 		tableSize *= 2
 
 		if entrypointEndPos > len(data) {
@@ -137,13 +138,11 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, verbose bool) (bool, []byte, error) {
 	startPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
-	entrypointLength := SYMMETRIC_KEY_LENGTH + OFFSET_POINTER_LEN
-
-	for startPos+entrypointLength < len(data) {
-		entrypointBytes := data[startPos : startPos+entrypointLength]
+	for startPos+suiteInfo.EntryPointLength < len(data) {
+		entrypointBytes := data[startPos : startPos+suiteInfo.EntryPointLength]
 
 		xof := recipient.Suite.XOF(sharedSecret)
-		decrypted := make([]byte, entrypointLength)
+		decrypted := make([]byte, suiteInfo.EntryPointLength)
 		xof.XORKeyStream(decrypted, entrypointBytes)
 		found, errorReason, message := entrypointTrialDecrypt(decrypted, data)
 
@@ -154,7 +153,7 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 			return found, message, nil
 		}
 
-		startPos += entrypointLength
+		startPos += suiteInfo.EntryPointLength
 	}
 
 	return false, nil, errors.New("no entrypoint was correctly decrypted")
@@ -163,16 +162,17 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 func entrypointTrialDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {
 
 	// verify pointer to payload
-	msgStartBytes := entrypoint[SYMMETRIC_KEY_LENGTH : SYMMETRIC_KEY_LENGTH+OFFSET_POINTER_LEN]
-	msgStart := int(binary.BigEndian.Uint32(msgStartBytes))
-	if msgStart > len(fullPURBBlob) {
+	pointerPos := len(entrypoint) - OFFSET_POINTER_LEN
+	pointerBytes := entrypoint[pointerPos:]
+	pointer := int(binary.BigEndian.Uint32(pointerBytes))
+	if pointer > len(fullPURBBlob) {
 		// the pointer is pointing outside the blob
 		return false, "entrypoint pointer is invalid", nil
 	}
 
 	// compute PayloadKey from entrypoint, create the decoder
-	key := entrypoint[:SYMMETRIC_KEY_LENGTH]
-	payload := fullPURBBlob[msgStart:]
+	key := entrypoint[0:pointerPos]
+	payload := fullPURBBlob[pointer:]
 	nonce := fullPURBBlob[:AEAD_NONCE_LENGTH]
 
 	msg, err := aeadDecrypt(payload, nonce, key, nil)

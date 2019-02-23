@@ -65,7 +65,7 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 	for suiteName, entrypoints := range purb.Header.EntryPoints {
 		lines = append(lines, fmt.Sprintf("Entrypoints for suite %v", suiteName))
 		for index, entrypoint := range entrypoints {
-			lines = append(lines, fmt.Sprintf("  Entrypoints [%v]: %+v @ offset %v (len %v)", index, entrypoint.SharedSecret, entrypoint.Offset, purb.Header.EntryPointLength))
+			lines = append(lines, fmt.Sprintf("  Entrypoints [%v]: %+v @ offset %v (len %v)", index, entrypoint.SharedSecret, entrypoint.Offset, entrypoint.Length))
 		}
 	}
 	lines = append(lines, fmt.Sprintf("Padded Payload: %+v @ offset %v (len %v)", purb.Payload, purb.Header.Length(), len(purb.Payload)))
@@ -95,5 +95,18 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 
 // KDF derives a key from shared bytes
 func KDF(password []byte) []byte {
-	return pbkdf2.Key(password, nil, 1, CORNERSTONE_LENGTH, sha256.New)
+	return pbkdf2.Key(password, nil, 1, 32, sha256.New)
+}
+
+func (si SuiteInfo) String() string {
+	s := "[positions: {"
+
+	for _, pos := range si.AllowedPositions {
+		s += strconv.Itoa(pos) + ", "
+	}
+	s = s[0:len(s)-2] + "}, "
+	s += "CSLen: " + strconv.Itoa(si.CornerstoneLength)
+	s += ", EPLen: " + strconv.Itoa(si.EntryPointLength)
+
+	return s + "]"
 }
