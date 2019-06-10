@@ -48,15 +48,15 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 					Nonce:            nil,
 					Header:           nil,
 					Payload:          nil,
-					PayloadKey:       nil,
+					SessionKey:       nil,
 					Recipients:       recipients,
 					Stream:           random.New(),
 					OriginalData:     msg, // just for statistics
 					PublicParameters: publicFixedParams,
 					IsVerbose:        simulationIsVerbose,
 				}
-				purb.Nonce = purb.randomBytes(AEAD_NONCE_LENGTH)
-				purb.PayloadKey = purb.randomBytes(SYMMETRIC_KEY_LENGTH)
+				purb.Nonce = purb.randomBytes(NONCE_LENGTH)
+				purb.SessionKey = purb.randomBytes(SYMMETRIC_KEY_LENGTH)
 
 				// creation of the entrypoints and cornerstones, places entrypoint and cornerstones
 				purb.Header = newEmptyHeader()
@@ -228,7 +228,7 @@ func SimulMeasureHeaderSize(nRepeat int, numRecipients []int) string {
 
 	si := createInfo()
 	key := make([]byte, SYMMETRIC_KEY_LENGTH)
-	nonce := make([]byte, AEAD_NONCE_LENGTH)
+	nonce := make([]byte, NONCE_LENGTH)
 	random.Bytes(key, random.New())
 	random.Bytes(nonce, random.New())
 
@@ -245,7 +245,7 @@ func SimulMeasureHeaderSize(nRepeat int, numRecipients []int) string {
 				Nonce:            nonce,
 				Header:           nil,
 				Payload:          nil,
-				PayloadKey:       key,
+				SessionKey:       key,
 				IsVerbose:        false,
 				Recipients:       decs,
 				Stream:           random.New(),
@@ -264,7 +264,7 @@ func SimulMeasureHeaderSize(nRepeat int, numRecipients []int) string {
 				Nonce:            nonce,
 				Header:           nil,
 				Payload:          nil,
-				PayloadKey:       key,
+				SessionKey:       key,
 				IsVerbose:        false,
 				Recipients:       decs,
 				Stream:           random.New(),
@@ -424,7 +424,7 @@ func SimulMeasureHeaderCompactness(nRepeat int, recipients []int, suites []int) 
 	resultsPURBs := new(Results)
 
 	key := make([]byte, SYMMETRIC_KEY_LENGTH)
-	nonce := make([]byte, AEAD_NONCE_LENGTH)
+	nonce := make([]byte, NONCE_LENGTH)
 	random.Bytes(key, random.New())
 	random.Bytes(nonce, random.New())
 
@@ -445,7 +445,7 @@ func SimulMeasureHeaderCompactness(nRepeat int, recipients []int, suites []int) 
 					Nonce:            nonce,
 					Header:           nil,
 					Payload:          nil,
-					PayloadKey:       key,
+					SessionKey:       key,
 					IsVerbose:        false,
 					Recipients:       decs,
 					Stream:           random.New(),
@@ -497,7 +497,7 @@ func shiftByAEAD_NONCE_LENGTH(pos []int) []int {
 	res := make([]int, len(pos))
 
 	for i := 0; i < len(pos); i++ {
-		res[i] = AEAD_NONCE_LENGTH + pos[i]
+		res[i] = NONCE_LENGTH + pos[i]
 	}
 
 	return res

@@ -17,7 +17,7 @@ func TestGenCornerstones(t *testing.T) {
 		Nonce:      nil,
 		Header:     nil,
 		Payload:    nil,
-		PayloadKey: nil,
+		SessionKey: nil,
 
 		IsVerbose:        true,
 		Recipients:       nil,

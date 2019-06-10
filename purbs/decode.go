@@ -3,7 +3,6 @@ package purbs
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 
@@ -53,7 +52,7 @@ func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 		log.LLvlf3("Recovered cornerstone has value %v, len %v", cornerstone, len(cornerstone))
 	}
 
-	//Now that we have the PayloadKey for our suite, calculate the shared PayloadKey
+	//Now that we have the SessionKey for our suite, calculate the shared SessionKey
 	pubKey := recipient.Suite.Point()
 	pubKey.(kyber.Hiding).HideDecode(cornerstone)
 
@@ -62,14 +61,14 @@ func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 	if err != nil {
 		return false, nil, err
 	}
-	sharedSecret := KDF(sharedBytes)
+	sharedSecret := KDF("", sharedBytes)
 
 	if verbose {
 		log.LLvlf3("Recovered sharedbytes value %v, len %v", sharedBytes, len(sharedBytes))
 		log.LLvlf3("Recovered sharedsecret value %v, len %v", sharedSecret, len(sharedSecret))
 	}
 
-	// Now we try to decrypt iteratively the entrypoints and check if the decrypted PayloadKey works for AEAD of payload
+	// Now we try to decrypt iteratively the entrypoints and check if the decrypted SessionKey works for AEAD of payload
 	if !publicFixedParameters.SimplifiedEntrypointsPlacement {
 		return entrypointTrialDecode(data, recipient, sharedSecret, suiteInfo, publicFixedParameters.HashTableCollisionLinearResolutionAttempts, verbose)
 	}
@@ -78,12 +77,11 @@ func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 
 func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, hashTableLinearResolutionCollisionAttempt int, verbose bool) (bool, []byte, error) {
 
-	hash := sha256.New()
-	hash.Write(sharedSecret)
-	intOfHashedValue := int(binary.BigEndian.Uint32(hash.Sum(nil))) // Large number to become a position
-
+	intOfHashedValue := int(binary.BigEndian.Uint32(KDF("pos", sharedSecret))) // Large number to become a position
 	tableSize := 1
 	hashTableStartPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
+
+	entrypointKey := KDF("key", sharedSecret)
 
 	for {
 		var entrypointIndexInHashTable int
@@ -100,7 +98,7 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 				break
 			}
 
-			xof := recipient.Suite.XOF(sharedSecret)
+			xof := recipient.Suite.XOF(entrypointKey)
 
 			decrypted := make([]byte, suiteInfo.EntryPointLength)
 			xof.XORKeyStream(decrypted, data[entrypointStartPos:entrypointEndPos])
@@ -111,7 +109,7 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 				log.LLvlf3("  yield %v", decrypted)
 			}
 
-			found, errorReason, message := entrypointTrialDecrypt(decrypted, data)
+			found, errorReason, message := payloadTrialDecrypt(decrypted, data)
 
 			if verbose {
 				log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
@@ -138,13 +136,14 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, verbose bool) (bool, []byte, error) {
 	startPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
+	entrypointKey := KDF("key", sharedSecret)
 	for startPos+suiteInfo.EntryPointLength < len(data) {
 		entrypointBytes := data[startPos : startPos+suiteInfo.EntryPointLength]
 
-		xof := recipient.Suite.XOF(sharedSecret)
+		xof := recipient.Suite.XOF(entrypointKey)
 		decrypted := make([]byte, suiteInfo.EntryPointLength)
 		xof.XORKeyStream(decrypted, entrypointBytes)
-		found, errorReason, message := entrypointTrialDecrypt(decrypted, data)
+		found, errorReason, message := payloadTrialDecrypt(decrypted, data)
 
 		if verbose {
 			log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
@@ -159,7 +158,7 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 	return false, nil, errors.New("no entrypoint was correctly decrypted")
 }
 
-func entrypointTrialDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {
+func payloadTrialDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {
 
 	// verify pointer to payload
 	pointerPos := len(entrypoint) - OFFSET_POINTER_LEN
@@ -170,10 +169,12 @@ func entrypointTrialDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, strin
 		return false, "entrypoint pointer is invalid", nil
 	}
 
-	// compute PayloadKey from entrypoint, create the decoder
-	key := entrypoint[0:pointerPos]
+	// compute SessionKey from entrypoint, create the decoder
+	sessionKey := entrypoint[0:pointerPos]
 	payload := fullPURBBlob[pointer:]
-	nonce := fullPURBBlob[:AEAD_NONCE_LENGTH]
+	nonce := fullPURBBlob[:NONCE_LENGTH]
+
+	key := KDF("enc", sessionKey)
 
 	msg, err := aeadDecrypt(payload, nonce, key, nil)
 	if err != nil {

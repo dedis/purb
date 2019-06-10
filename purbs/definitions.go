@@ -13,7 +13,7 @@ const SYMMETRIC_KEY_LENGTH = 16
 const OFFSET_POINTER_LEN = 4
 
 // Length (in bytes) of the Nonce used at the beginning of the PURB
-const AEAD_NONCE_LENGTH = 12
+const NONCE_LENGTH = 12
 
 // Length (in bytes) of the MAC tag in the entry point (only used with entrypoints are encrypted with AEAD)
 const MAC_AUTHENTICATION_TAG_LENGTH = SYMMETRIC_KEY_LENGTH
@@ -25,7 +25,7 @@ type Purb struct {
 	Nonce      []byte // Nonce used in both AEAD of entrypoints and payload. The same for different entrypoints as the keys are different. It is stored in the very beginning of the purb
 	Header     *Header
 	Payload    []byte        // Payload contains already padded plaintext
-	PayloadKey []byte        // Payload PayloadKey
+	SessionKey []byte        // SessionKey is encapsulated and used to derive PayloadKey and MacKey
 	Recipients []Recipient   // tuple with (Suite, PublicKey, PrivateKey)
 	Stream     cipher.Stream // Used to get randomness
 
@@ -56,10 +56,10 @@ type Suite interface {
 type SuiteInfoMap map[string]*SuiteInfo
 
 // SuiteInfo holds possible positions whose cornerstones might take in a header
-// and a PayloadKey length for this suite
+// and a SessionKey length for this suite
 type SuiteInfo struct {
-	AllowedPositions  []int // alternative PayloadKey/point position in purb header
-	CornerstoneLength int   // length of each PayloadKey/point in bytes
+	AllowedPositions  []int // alternative SessionKey/point position in purb header
+	CornerstoneLength int   // length of each SessionKey/point in bytes
 	EntryPointLength  int   // Length of each encrypted entry point
 }
 
@@ -70,7 +70,7 @@ type Header struct {
 	Layout       *RegionReservationStruct // An array of byte slices where each of the bytes slice represents a hash table entry
 }
 
-// Ephemeral Diffie-Hellman keys for all PayloadKey-holders using this suite.
+// Ephemeral Diffie-Hellman keys for all SessionKey-holders using this suite.
 // Should have a uniform representation, e.g., an Elligator point.
 type Cornerstone struct {
 	SuiteName string
@@ -84,7 +84,7 @@ type Cornerstone struct {
 //EntryPoint holds the info required to create an entrypoint for each recipient.
 type EntryPoint struct {
 	Recipient    Recipient // Recipient whom this entrypoint is for
-	SharedSecret []byte    // Ephemeral secret derived from negotiated DH secret
+	SharedSecret []byte    // Ephemeral secret derived using DH
 	Offset       int       // Starting byte position in the header
 	Length       int
 }

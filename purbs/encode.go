@@ -3,7 +3,6 @@ package purbs
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/sha256"
 	"encoding/binary"
 	"github.com/dedis/kyber/util/key"
 	"github.com/dedis/kyber/util/random"
@@ -29,7 +28,7 @@ func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *P
 		Nonce:            nil,
 		Header:           nil,
 		Payload:          nil,
-		PayloadKey:       nil,
+		SessionKey:       nil,
 		Recipients:       recipients,
 		Stream:           stream,
 		OriginalData:     data, // just for statistics
@@ -38,11 +37,11 @@ func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *P
 	}
 
 	// creation of the global Nonce and random playload key
-	purb.Nonce = purb.randomBytes(AEAD_NONCE_LENGTH)
-	purb.PayloadKey = purb.randomBytes(SYMMETRIC_KEY_LENGTH)
+	purb.Nonce = purb.randomBytes(NONCE_LENGTH)
+	purb.SessionKey = purb.randomBytes(SYMMETRIC_KEY_LENGTH)
 
 	if purb.IsVerbose {
-		log.LLvlf3("Created an empty PURB, original data %v, payload key %v, nonce %v", data, purb.PayloadKey, purb.Nonce)
+		log.LLvlf3("Created an empty PURB, original data %v, payload key %v, nonce %v", data, purb.SessionKey, purb.Nonce)
 		log.LLvlf3("Recipients %+v", recipients)
 		for i := range purb.PublicParameters.SuiteInfoMap {
 			log.LLvlf3("SuiteInfoMap [%v]: len %v, positions %+v", i, purb.PublicParameters.SuiteInfoMap[i].CornerstoneLength, purb.PublicParameters.SuiteInfoMap[i].AllowedPositions)
@@ -92,7 +91,7 @@ func (purb *Purb) createCornerstones() {
 
 		var keyPair *key.Pair
 		for {
-			// Generate a fresh PayloadKey keyPair of a private PayloadKey (scalar), a public PayloadKey (point), and hidden encoding of the public PayloadKey
+			// Generate a fresh SessionKey keyPair of a private SessionKey (scalar), a public SessionKey (point), and hidden encoding of the public SessionKey
 			keyPair = key.NewHidingKeyPair(recipient.Suite)
 
 			if keyPair.Private == nil || keyPair.Public == nil {
@@ -103,7 +102,7 @@ func (purb *Purb) createCornerstones() {
 			}
 
 			if keyPair.Hiding.HideLen() > purb.PublicParameters.SuiteInfoMap[recipient.SuiteName].CornerstoneLength {
-				log.Fatal("Length of elligator Encoded PayloadKey is not what we expect. It's ", keyPair.Hiding.HideLen())
+				log.Fatal("Length of an Elligator-encoded public key is not what we expect. It's ", keyPair.Hiding.HideLen())
 			}
 
 			// key is OK!
@@ -120,7 +119,7 @@ func (purb *Purb) createCornerstones() {
 	}
 }
 
-// Compute a shared secret per entrypoint used to encrypt it. It takes a public PayloadKey of a recipient and multiplies it by fresh private PayloadKey for a given cipher suite.
+// Compute a shared secret per entrypoint used to encrypt it. It takes a public SessionKey of a recipient and multiplies it by fresh private SessionKey for a given cipher suite.
 func (purb *Purb) createEntryPoints() {
 
 	recipients := purb.Recipients
@@ -132,7 +131,7 @@ func (purb *Purb) createEntryPoints() {
 		// fetch the cornerstone containing the freshly-generated public key for this suite
 		cornerstone, found := header.Cornerstones[recipient.SuiteName]
 		if !found {
-			panic("no freshly generated private PayloadKey exists for this ciphersuite")
+			panic("no freshly generated private SessionKey exists for this ciphersuite")
 		}
 
 		// compute shared key for the entrypoint
@@ -141,7 +140,7 @@ func (purb *Purb) createEntryPoints() {
 		sharedKey := recipientKey.Mul(senderKey, recipientKey)
 
 		if sharedKey == nil {
-			panic("couldn't negotiate a shared DH PayloadKey")
+			panic("couldn't negotiate a shared DH SessionKey")
 		}
 
 		sharedBytes, err := sharedKey.MarshalBinary()
@@ -149,8 +148,8 @@ func (purb *Purb) createEntryPoints() {
 			panic("error" + err.Error())
 		}
 
-		// derive a PayloadKey using KDF
-		sharedSecret := KDF(sharedBytes)
+		// derive a shared secret using KDF
+		sharedSecret := KDF("", sharedBytes)
 
 		if purb.IsVerbose {
 			log.LLvlf3("Shared secret with suite=%v, entrypoint value %v", recipient.SuiteName, sharedBytes)
@@ -290,8 +289,8 @@ func (purb *Purb) placeCornerstones() {
 	secondaryLayout := NewRegionReservationStruct()
 
 	// we first reserve the spot for the nonce
-	mainLayout.Reserve(0, AEAD_NONCE_LENGTH, true, "nonce")
-	secondaryLayout.Reserve(0, AEAD_NONCE_LENGTH, true, "nonce")
+	mainLayout.Reserve(0, NONCE_LENGTH, true, "nonce")
+	secondaryLayout.Reserve(0, NONCE_LENGTH, true, "nonce")
 
 	cornerstonesToPlace := make([]*Cornerstone, 0)
 	cornerstonesPlaced := make([]*Cornerstone, 0)
@@ -335,9 +334,7 @@ func (purb *Purb) placeEntrypoints() {
 			//initial hash table size
 			tableSize := 1
 			positionFound := false
-			hash := sha256.New()
-			hash.Write(entrypoint.SharedSecret)
-			intOfHashedValue := int(binary.BigEndian.Uint32(hash.Sum(nil))) // Large number to become a position
+			intOfHashedValue := int(binary.BigEndian.Uint32(KDF("pos", entrypoint.SharedSecret))) // Large number to become a position
 			var posInHashTable int
 
 			// we start with a 1-sized hash table, try to place (and break on success), otherwise it grows by 2
@@ -410,7 +407,8 @@ func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) {
 		log.LLvlf3("Payload padded from %v to %v bytes", len(data), len(paddedData))
 	}
 
-	payload, err := aeadEncrypt(paddedData, purb.Nonce, purb.PayloadKey, nil, stream)
+	payloadKey := KDF("enc", purb.SessionKey)
+	payload, err := aeadEncrypt(paddedData, purb.Nonce, payloadKey, nil, stream)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -427,11 +425,11 @@ func (purb *Purb) placePayloadAndCornerstones() {
 
 	// copy nonce
 	if len(purb.Nonce) != 0 {
-		region := buffer.growAndGetRegion(0, AEAD_NONCE_LENGTH)
+		region := buffer.growAndGetRegion(0, NONCE_LENGTH)
 		copy(region, purb.Nonce)
 
 		if purb.IsVerbose {
-			log.LLvlf3("Adding nonce in [%v:%v], value %v, len %v", 0, AEAD_NONCE_LENGTH, purb.Nonce, len(purb.Nonce))
+			log.LLvlf3("Adding nonce in [%v:%v], value %v, len %v", 0, NONCE_LENGTH, purb.Nonce, len(purb.Nonce))
 		}
 	}
 
@@ -453,12 +451,13 @@ func (purb *Purb) placePayloadAndCornerstones() {
 	payloadOffset := make([]byte, OFFSET_POINTER_LEN)
 	binary.BigEndian.PutUint32(payloadOffset, uint32(purb.Header.Length()))
 
-	entrypointContent := append(purb.PayloadKey, payloadOffset...)
+	entrypointContent := append(purb.SessionKey, payloadOffset...)
 	for _, entrypointsPerSuite := range purb.Header.EntryPoints {
 		for _, entrypoint := range entrypointsPerSuite {
 
+			entrypointKey := KDF("key", entrypoint.SharedSecret)
 			// we use shared secret as a seed to a Stream cipher
-			xof := entrypoint.Recipient.Suite.XOF(entrypoint.SharedSecret)
+			xof := entrypoint.Recipient.Suite.XOF(entrypointKey)
 			startPos := entrypoint.Offset
 			endPos := startPos + entrypoint.Length
 
@@ -543,7 +542,7 @@ func (purb *Purb) placePayloadAndCornerstones() {
 // Encrypt using AEAD
 func aeadEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]byte, error) {
 
-	// Generate a random 16-byte PayloadKey and create a cipher from it
+	// If no key is passed, generate a random 16-byte key and create a cipher from it
 	if key == nil {
 		key := make([]byte, SYMMETRIC_KEY_LENGTH)
 		random.Bytes(key, stream)
@@ -607,7 +606,7 @@ func (si *SuiteInfo) byteRangeForAllowedPositionIndex(index int) (int, int) {
 
 // Compute the length of the header when transformed to []byte
 func (h *Header) Length() int {
-	length := AEAD_NONCE_LENGTH
+	length := NONCE_LENGTH
 
 	for _, entryPoints := range h.EntryPoints {
 		for _, entrypoint := range entryPoints {

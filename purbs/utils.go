@@ -3,7 +3,6 @@ package purbs
 import (
 	"crypto/sha256"
 	"fmt"
-	"golang.org/x/crypto/pbkdf2"
 	"strconv"
 	"strings"
 )
@@ -93,9 +92,13 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 	return "\n" + top + body + bottom
 }
 
-// KDF derives a key from shared bytes
-func KDF(password []byte) []byte {
-	return pbkdf2.Key(password, nil, 1, 32, sha256.New)
+// KDF derives a key from a purpose string and seed bytes
+func KDF(purpose string, seed []byte) []byte {
+	h := sha256.New()
+	h.Write([]byte(purpose))
+	h.Write(seed)
+	return h.Sum(nil)
+	//return pbkdf2.Key(password, nil, 1, 32, sha256.New)
 }
 
 func (si SuiteInfo) String() string {
