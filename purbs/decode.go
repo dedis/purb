@@ -1,8 +1,6 @@
 package purbs
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"encoding/binary"
 	"errors"
 
@@ -186,22 +184,4 @@ func payloadTrialDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, 
 	}
 
 	return true, "", msg
-}
-
-// Decrypt using AEAD
-func aeadDecrypt(ciphertext, nonce, key, additional []byte) ([]byte, error) {
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-
-	// Encrypt and authenticate payload
-	decrypted, err := aesgcm.Open(nil, nonce, ciphertext, additional)
-
-	return decrypted, err
 }

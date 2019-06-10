@@ -1,10 +1,14 @@
 package purbs
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/sha256"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/dedis/kyber/util/random"
 )
 
 // Simply returns a string with the internal details of the PURB
@@ -90,6 +94,47 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 	bottom := strings.Repeat("-", max+4) + "\n"
 
 	return "\n" + top + body + bottom
+}
+
+// Encrypt using AEAD
+func aeadEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]byte, error) {
+
+	// If no key is passed, generate a random 16-byte key and create a cipher from it
+	if key == nil {
+		key := make([]byte, SYMMETRIC_KEY_LENGTH)
+		random.Bytes(key, stream)
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	// Encrypt and authenticate payload
+	encrypted := aesgcm.Seal(nil, nonce, data, additional)
+
+	return encrypted, nil
+}
+
+// Decrypt using AEAD
+func aeadDecrypt(ciphertext, nonce, key, additional []byte) ([]byte, error) {
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	// Encrypt and authenticate payload
+	decrypted, err := aesgcm.Open(nil, nonce, ciphertext, additional)
+
+	return decrypted, err
 }
 
 // KDF derives a key from a purpose string and seed bytes

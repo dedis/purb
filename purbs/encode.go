@@ -1,14 +1,14 @@
 package purbs
 
 import (
-	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
+	"sort"
+	"strconv"
+
 	"github.com/dedis/kyber/util/key"
 	"github.com/dedis/kyber/util/random"
 	"github.com/dedis/onet/log"
-	"sort"
-	"strconv"
 )
 
 // Creates a struct with parameters that are *fixed* across all PURBs. Should be constants, but here it is a variable for simulating various parameters
@@ -537,29 +537,6 @@ func (purb *Purb) placePayloadAndCornerstones() {
 	}
 
 	purb.byteRepresentation = buffer.toBytes()
-}
-
-// Encrypt using AEAD
-func aeadEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]byte, error) {
-
-	// If no key is passed, generate a random 16-byte key and create a cipher from it
-	if key == nil {
-		key := make([]byte, SYMMETRIC_KEY_LENGTH)
-		random.Bytes(key, stream)
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-
-	// Encrypt and authenticate payload
-	encrypted := aesgcm.Seal(nil, nonce, data, additional)
-
-	return encrypted, nil
 }
 
 // ToBytes get the []byte representation of the PURB
