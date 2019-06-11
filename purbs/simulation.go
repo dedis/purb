@@ -16,6 +16,9 @@ import (
 	"time"
 )
 
+// Fixed for the simulation: 16-byte symmetric key + 4-byte offset position + 16-byte authentication tag
+const ENTRYPOINT_LENGTH = 16 + 4 + 16
+
 const simulationIsVerbose = false
 const simulationUsesSimplifiedLayout = false
 
@@ -83,7 +86,7 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 				resultsPayload.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 				// converts everything to []byte, performs the XOR trick on the cornerstones
 
-				purb.placePayloadAndCornerstones()
+				purb.placePayloadAndCornerstones(purb.Stream)
 
 				resultsCSAndEPValues.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 
@@ -471,7 +474,7 @@ func SimulMeasureHeaderCompactness(nRepeat int, recipients []int, suites []int) 
 
 func createInfo() SuiteInfoMap {
 
-	entryPointLen := 16 + 4
+	entryPointLen := ENTRYPOINT_LENGTH
 	cornerstoneLen := 32
 
 	info := make(SuiteInfoMap)
@@ -493,7 +496,7 @@ func createDecoders(n int) []Recipient {
 	return decs
 }
 
-func shiftByAEAD_NONCE_LENGTH(pos []int) []int {
+func shiftByNONCE_LENGTH(pos []int) []int {
 	res := make([]int, len(pos))
 
 	for i := 0; i < len(pos); i++ {
@@ -516,32 +519,32 @@ func createMultiInfoReal(N int) SuiteInfoMap {
 	info := make(SuiteInfoMap)
 
 	info["PURB_A"] = &SuiteInfo{
-		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0}),
+		AllowedPositions:  shiftByNONCE_LENGTH([]int{0}),
 		CornerstoneLength: 64,
 		EntryPointLength:  48,
 	}
 	info["PURB_B"] = &SuiteInfo{
-		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 64}),
+		AllowedPositions:  shiftByNONCE_LENGTH([]int{0, 64}),
 		CornerstoneLength: 32,
 		EntryPointLength:  48,
 	}
 	info["PURB_C"] = &SuiteInfo{
-		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 64, 96}),
+		AllowedPositions:  shiftByNONCE_LENGTH([]int{0, 64, 96}),
 		CornerstoneLength: 64,
 		EntryPointLength:  80,
 	}
 	info["PURB_D"] = &SuiteInfo{
-		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 32, 64, 160}),
+		AllowedPositions:  shiftByNONCE_LENGTH([]int{0, 32, 64, 160}),
 		CornerstoneLength: 32,
 		EntryPointLength:  80,
 	}
 	info["PURB_E"] = &SuiteInfo{
-		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 64, 128, 192}),
+		AllowedPositions:  shiftByNONCE_LENGTH([]int{0, 64, 128, 192}),
 		CornerstoneLength: 64,
 		EntryPointLength:  64,
 	}
 	info["PURB_F"] = &SuiteInfo{
-		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 32, 64, 96, 128, 256}),
+		AllowedPositions:  shiftByNONCE_LENGTH([]int{0, 32, 64, 96, 128, 256}),
 		CornerstoneLength: 32,
 		EntryPointLength:  64,
 	}
@@ -561,7 +564,7 @@ func createMultiInfoReal(N int) SuiteInfoMap {
 
 func createMultiInfo(N int) SuiteInfoMap {
 
-	entryPointLen := 16 + 4
+	entryPointLen := ENTRYPOINT_LENGTH
 	cornerstoneLen := 32
 	aeadNonceLen := 12
 

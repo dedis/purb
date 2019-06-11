@@ -159,7 +159,7 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 
 func getDummySuiteInfo(N int) SuiteInfoMap {
 
-	entryPointLen := 16 + 4
+	entryPointLen := 16 + 4 + 16
 	cornerstoneLen := 32
 	aeadNonceLen := 12
 

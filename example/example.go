@@ -44,10 +44,10 @@ func main() {
 	fmt.Println()
 
 	// Decode
-	success, decrypted, error := purbs.Decode(blob, &recipients[0], publicFixedParams, verbose)
+	success, decrypted, err := purbs.Decode(blob, &recipients[0], publicFixedParams, verbose)
 
 	fmt.Println("Success:", success)
-	fmt.Println("Error message:", error)
+	fmt.Println("Error message:", err)
 	fmt.Println(string(decrypted))
 	fmt.Println(hex.Dump(decrypted))
 }
@@ -55,7 +55,7 @@ func main() {
 func getDummySuiteInfo() purbs.SuiteInfoMap {
 	info := make(purbs.SuiteInfoMap)
 	cornerstoneLength := 32 // defined by Curve 25519
-	entryPointLength := 16 + 4 // 16 bytes for key, 4 byte for pointer
+	entryPointLength := 16 + 4 + 16 // 16-byte symmetric key + 4-byte offset position + 16-byte authentication tag
 	info[curve25519.NewBlakeSHA256Curve25519(true).String()] = &purbs.SuiteInfo{
 		AllowedPositions: []int{12 + 0*cornerstoneLength, 12 + 1*cornerstoneLength, 12 + 3*cornerstoneLength, 12 + 4*cornerstoneLength},
 		CornerstoneLength: cornerstoneLength, EntryPointLength: entryPointLength}

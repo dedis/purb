@@ -55,7 +55,7 @@ func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *P
 	purb.padThenEncryptData(data, stream)
 
 	// converts everything to []byte, performs the XOR trick on the cornerstones
-	purb.placePayloadAndCornerstones()
+	purb.placePayloadAndCornerstones(stream)
 
 	return purb, nil
 }
@@ -420,7 +420,7 @@ func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) {
 }
 
 // ToBytes writes content of entrypoints and encrypted payloads into contiguous buffer
-func (purb *Purb) placePayloadAndCornerstones() {
+func (purb *Purb) placePayloadAndCornerstones(stream cipher.Stream) {
 	buffer := new(GrowableBuffer)
 
 	// copy nonce
@@ -454,15 +454,19 @@ func (purb *Purb) placePayloadAndCornerstones() {
 	entrypointContent := append(purb.SessionKey, payloadOffset...)
 	for _, entrypointsPerSuite := range purb.Header.EntryPoints {
 		for _, entrypoint := range entrypointsPerSuite {
-
-			entrypointKey := KDF("key", entrypoint.SharedSecret)
-			// we use shared secret as a seed to a Stream cipher
-			xof := entrypoint.Recipient.Suite.XOF(entrypointKey)
 			startPos := entrypoint.Offset
 			endPos := startPos + entrypoint.Length
-
 			region := buffer.growAndGetRegion(startPos, endPos)
-			xof.XORKeyStream(region, entrypointContent)
+
+			// we use shared secret as a seed to a Stream cipher
+			entrypointKey := KDF("key", entrypoint.SharedSecret)
+			encrypted, err := aeadEncrypt(entrypointContent, purb.Nonce, entrypointKey, nil, stream)
+			for i := range encrypted {
+				region[i] = encrypted[i]
+			}
+			if err != nil {
+				log.Fatal(err.Error())
+			}
 
 			if purb.IsVerbose {
 				log.LLvlf3("Adding symmetric entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v", startPos, endPos, entrypointContent, region, entrypoint.SharedSecret, len(entrypointContent))

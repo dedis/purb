@@ -80,7 +80,7 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 	hashTableStartPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
 	entrypointKey := KDF("key", sharedSecret)
-
+	nonce := data[:NONCE_LENGTH]
 	for {
 		var entrypointIndexInHashTable int
 
@@ -96,10 +96,10 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 				break
 			}
 
-			xof := recipient.Suite.XOF(entrypointKey)
-
-			decrypted := make([]byte, suiteInfo.EntryPointLength)
-			xof.XORKeyStream(decrypted, data[entrypointStartPos:entrypointEndPos])
+			decrypted, err := aeadDecrypt(data[entrypointStartPos:entrypointEndPos], nonce, entrypointKey, nil)
+			if err != nil {
+				continue // it is not the correct entry point so we move one to try again
+			}
 
 			if verbose {
 				log.LLvlf3("Recovering potential entrypoint [%v:%v], value %v", entrypointStartPos, entrypointEndPos, data[entrypointStartPos:entrypointEndPos])
@@ -135,12 +135,14 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 	startPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
 	entrypointKey := KDF("key", sharedSecret)
+	nonce := data[:NONCE_LENGTH]
 	for startPos+suiteInfo.EntryPointLength < len(data) {
 		entrypointBytes := data[startPos : startPos+suiteInfo.EntryPointLength]
-
-		xof := recipient.Suite.XOF(entrypointKey)
-		decrypted := make([]byte, suiteInfo.EntryPointLength)
-		xof.XORKeyStream(decrypted, entrypointBytes)
+		decrypted, err := aeadDecrypt(entrypointBytes, nonce, entrypointKey, nil)
+		if err != nil {
+			startPos += suiteInfo.EntryPointLength
+			continue // it is not the correct entry point so we move one to try again
+		}
 		found, errorReason, message := payloadTrialDecrypt(decrypted, data)
 
 		if verbose {
@@ -149,8 +151,6 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 		if found {
 			return found, message, nil
 		}
-
-		startPos += suiteInfo.EntryPointLength
 	}
 
 	return false, nil, errors.New("no entrypoint was correctly decrypted")
@@ -159,8 +159,9 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 func payloadTrialDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {
 
 	// verify pointer to payload
-	pointerPos := len(entrypoint) - OFFSET_POINTER_LEN
-	pointerBytes := entrypoint[pointerPos:]
+	//pointerPos := len(entrypoint) - OFFSET_POINTER_LEN
+	pointerPos := SYMMETRIC_KEY_LENGTH
+	pointerBytes := entrypoint[pointerPos : pointerPos+OFFSET_POINTER_LEN]
 	pointer := int(binary.BigEndian.Uint32(pointerBytes))
 	if pointer > len(fullPURBBlob) {
 		// the pointer is pointing outside the blob

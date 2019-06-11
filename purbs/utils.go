@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dedis/kyber/group/curve25519"
 	"github.com/dedis/kyber/util/random"
 )
 
@@ -135,6 +136,26 @@ func aeadDecrypt(ciphertext, nonce, key, additional []byte) ([]byte, error) {
 	decrypted, err := aesgcm.Open(nil, nonce, ciphertext, additional)
 
 	return decrypted, err
+}
+
+// Encrypt using a stream cipher Blake2xb where key is used as the seed
+func streamEncrypt(data, key []byte) []byte {
+	ciphertext := make([]byte, len(data))
+	suite := curve25519.NewBlakeSHA256Curve25519(true)
+	xof := suite.XOF(key)
+	xof.XORKeyStream(ciphertext, data)
+
+	return ciphertext
+}
+
+// Encrypt using a stream cipher Blake2xb
+func streamDecrypt(ciphertext, key []byte) []byte {
+	data := make([]byte, len(ciphertext))
+	suite := curve25519.NewBlakeSHA256Curve25519(true)
+	xof := suite.XOF(key)
+	xof.XORKeyStream(data, ciphertext)
+
+	return data
 }
 
 // KDF derives a key from a purpose string and seed bytes
