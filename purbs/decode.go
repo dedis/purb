@@ -107,7 +107,7 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 				log.LLvlf3("  yield %v", decrypted)
 			}
 
-			found, errorReason, message := payloadTrialDecrypt(decrypted, data)
+			found, errorReason, message := payloadDecrypt(decrypted, data)
 
 			if verbose {
 				log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
@@ -127,8 +127,6 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 			return false, nil, errors.New("no entrypoint was correctly decrypted")
 		}
 	}
-
-	return false, nil, errors.New("no entrypoint was correctly decrypted")
 }
 
 func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, verbose bool) (bool, []byte, error) {
@@ -143,7 +141,7 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 			startPos += suiteInfo.EntryPointLength
 			continue // it is not the correct entry point so we move one to try again
 		}
-		found, errorReason, message := payloadTrialDecrypt(decrypted, data)
+		found, errorReason, message := payloadDecrypt(decrypted, data)
 
 		if verbose {
 			log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
@@ -156,11 +154,9 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 	return false, nil, errors.New("no entrypoint was correctly decrypted")
 }
 
-func payloadTrialDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {
-
+func payloadDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {
 	// verify pointer to payload
-	//pointerPos := len(entrypoint) - OFFSET_POINTER_LEN
-	pointerPos := SYMMETRIC_KEY_LENGTH
+	pointerPos := len(entrypoint) - OFFSET_POINTER_LEN
 	pointerBytes := entrypoint[pointerPos : pointerPos+OFFSET_POINTER_LEN]
 	pointer := int(binary.BigEndian.Uint32(pointerBytes))
 	if pointer > len(fullPURBBlob) {
@@ -171,14 +167,9 @@ func payloadTrialDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, 
 	// compute SessionKey from entrypoint, create the decoder
 	sessionKey := entrypoint[0:pointerPos]
 	payload := fullPURBBlob[pointer:]
-	nonce := fullPURBBlob[:NONCE_LENGTH]
 
 	key := KDF("enc", sessionKey)
-
-	msg, err := aeadDecrypt(payload, nonce, key, nil)
-	if err != nil {
-		return false, "aead opening error", nil
-	}
+	msg := streamDecrypt(payload, key)
 
 	if len(msg) != 0 {
 		msg = unPad(msg)

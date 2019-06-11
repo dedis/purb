@@ -408,11 +408,7 @@ func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) {
 	}
 
 	payloadKey := KDF("enc", purb.SessionKey)
-	payload, err := aeadEncrypt(paddedData, purb.Nonce, payloadKey, nil, stream)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	purb.Payload = payload
+	purb.Payload = streamEncrypt(paddedData, payloadKey)
 
 	if purb.IsVerbose {
 		log.LLvlf3("Payload padded encrypted to %v (len %v)", purb.Payload, len(purb.Payload))
