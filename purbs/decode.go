@@ -1,6 +1,8 @@
 package purbs
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 
@@ -9,7 +11,7 @@ import (
 )
 
 // Decode takes a PURB blob and a recipient info (suite+KeyPair) and extracts the payload
-func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublicFixedParameters, verbose bool) (bool, []byte, error) {
+func Decode(blob []byte, recipient *Recipient, publicFixedParameters *PurbPublicFixedParameters, verbose bool) (bool, []byte, error) {
 	suiteName := recipient.SuiteName
 	suiteInfo := publicFixedParameters.SuiteInfoMap[suiteName]
 
@@ -20,6 +22,9 @@ func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 	if suiteInfo == nil {
 		return false, nil, errors.New("no positions suiteInfo for this suite")
 	}
+
+	// we must not take MAC into account when computing public-key XOR
+	data := blob[ : len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
 
 	// XOR all the possible suite positions to computer the cornerstone value
 	cornerstone := make([]byte, suiteInfo.CornerstoneLength)
@@ -68,19 +73,20 @@ func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 
 	// Now we try to decrypt iteratively the entrypoints and check if the decrypted SessionKey works for AEAD of payload
 	if !publicFixedParameters.SimplifiedEntrypointsPlacement {
-		return entrypointTrialDecode(data, recipient, sharedSecret, suiteInfo, publicFixedParameters.HashTableCollisionLinearResolutionAttempts, verbose)
+		return entrypointTrialDecode(blob, recipient, sharedSecret, suiteInfo, publicFixedParameters.HashTableCollisionLinearResolutionAttempts, verbose)
 	}
-	return entrypointTrialDecodeSimplified(data, recipient, sharedSecret, suiteInfo, verbose)
+	return entrypointTrialDecodeSimplified(blob, recipient, sharedSecret, suiteInfo, verbose)
 }
 
-func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, hashTableLinearResolutionCollisionAttempt int, verbose bool) (bool, []byte, error) {
+func entrypointTrialDecode(blob []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, hashTableLinearResolutionCollisionAttempt int, verbose bool) (bool, []byte, error) {
 
 	intOfHashedValue := int(binary.BigEndian.Uint32(KDF("pos", sharedSecret))) // Large number to become a position
 	tableSize := 1
 	hashTableStartPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
 	entrypointKey := KDF("key", sharedSecret)
-	nonce := data[:NONCE_LENGTH]
+	nonce := blob[:NONCE_LENGTH]
+	data := blob[ : len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
 	for {
 		var entrypointIndexInHashTable int
 
@@ -107,6 +113,11 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 				log.LLvlf3("  yield %v", decrypted)
 			}
 
+			ok := verifyMAC(decrypted, blob)
+			if !ok {
+				return false, nil, errors.New("authentication tag is invalid")
+			}
+
 			found, errorReason, message := payloadDecrypt(decrypted, data)
 
 			if verbose {
@@ -129,11 +140,12 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 	}
 }
 
-func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, verbose bool) (bool, []byte, error) {
+func entrypointTrialDecodeSimplified(blob []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, verbose bool) (bool, []byte, error) {
 	startPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
 	entrypointKey := KDF("key", sharedSecret)
-	nonce := data[:NONCE_LENGTH]
+	nonce := blob[:NONCE_LENGTH]
+	data := blob[:len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
 	for startPos+suiteInfo.EntryPointLength < len(data) {
 		entrypointBytes := data[startPos : startPos+suiteInfo.EntryPointLength]
 		decrypted, err := aeadDecrypt(entrypointBytes, nonce, entrypointKey, nil)
@@ -141,6 +153,12 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 			startPos += suiteInfo.EntryPointLength
 			continue // it is not the correct entry point so we move one to try again
 		}
+
+		ok := verifyMAC(decrypted, blob)
+		if !ok {
+			return false, nil, errors.New("authentication tag is invalid")
+		}
+
 		found, errorReason, message := payloadDecrypt(decrypted, data)
 
 		if verbose {
@@ -152,6 +170,20 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 	}
 
 	return false, nil, errors.New("no entrypoint was correctly decrypted")
+}
+
+// verifies the authentication tag of a PURB
+func verifyMAC(entrypoint []byte, blob []byte) bool {
+	sessionKey := entrypoint[0:SYMMETRIC_KEY_LENGTH]
+	macKey := KDF("mac", sessionKey)
+
+	data := blob[ : len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
+	tag := blob[len(blob)-MAC_AUTHENTICATION_TAG_LENGTH : ]
+
+	mac := hmac.New(sha256.New, macKey)
+	mac.Write(data)
+	computedMAC := mac.Sum(nil)
+	return hmac.Equal(computedMAC, tag)
 }
 
 func payloadDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {

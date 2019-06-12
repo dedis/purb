@@ -88,6 +88,8 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 
 				purb.placePayloadAndCornerstones(purb.Stream)
 
+				purb.addMAC()
+
 				resultsCSAndEPValues.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 
 				blob := purb.ToBytes()

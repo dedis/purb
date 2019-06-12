@@ -2,6 +2,8 @@ package purbs
 
 import (
 	"crypto/cipher"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/binary"
 	"sort"
 	"strconv"
@@ -56,6 +58,9 @@ func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *P
 
 	// converts everything to []byte, performs the XOR trick on the cornerstones
 	purb.placePayloadAndCornerstones(stream)
+
+	// computes and appends HMAC to a byte representation of a full purb
+	purb.addMAC()
 
 	return purb, nil
 }
@@ -415,7 +420,7 @@ func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) {
 	}
 }
 
-// ToBytes writes content of entrypoints and encrypted payloads into contiguous buffer
+// placePayloadAndCornerstones writes content of entrypoints and encrypted payloads into contiguous buffer
 func (purb *Purb) placePayloadAndCornerstones(stream cipher.Stream) {
 	buffer := new(GrowableBuffer)
 
@@ -537,6 +542,15 @@ func (purb *Purb) placePayloadAndCornerstones(stream cipher.Stream) {
 	}
 
 	purb.byteRepresentation = buffer.toBytes()
+}
+
+// addMAC computes HMAC over a byte representation of a complete PURB
+func (purb *Purb) addMAC() {
+	macKey := KDF("mac", purb.SessionKey)
+	mac := hmac.New(sha256.New, macKey)
+	mac.Write(purb.byteRepresentation)
+	tag := mac.Sum(nil)
+	purb.byteRepresentation = append(purb.byteRepresentation, tag...)
 }
 
 // ToBytes get the []byte representation of the PURB

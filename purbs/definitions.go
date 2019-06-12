@@ -16,7 +16,7 @@ const OFFSET_POINTER_LEN = 4
 const NONCE_LENGTH = 12
 
 // Length (in bytes) of the MAC tag in the entry point (only used with entrypoints are encrypted with AEAD)
-const MAC_AUTHENTICATION_TAG_LENGTH = SYMMETRIC_KEY_LENGTH
+const MAC_AUTHENTICATION_TAG_LENGTH = 32
 
 // Structure to define the whole PURB
 type Purb struct {

@@ -132,7 +132,7 @@ func aeadDecrypt(ciphertext, nonce, key, additional []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	// Encrypt and authenticate payload
+	// Decrypt and verify payload
 	decrypted, err := aesgcm.Open(nil, nonce, ciphertext, additional)
 
 	return decrypted, err
