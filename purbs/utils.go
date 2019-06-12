@@ -1,11 +1,15 @@
 package purbs
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/sha256"
 	"fmt"
-	"golang.org/x/crypto/pbkdf2"
 	"strconv"
 	"strings"
+
+	"github.com/dedis/kyber/group/curve25519"
+	"github.com/dedis/kyber/util/random"
 )
 
 // Simply returns a string with the internal details of the PURB
@@ -93,9 +97,74 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 	return "\n" + top + body + bottom
 }
 
-// KDF derives a key from shared bytes
-func KDF(password []byte) []byte {
-	return pbkdf2.Key(password, nil, 1, 32, sha256.New)
+// Encrypt using AEAD
+func aeadEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]byte, error) {
+
+	// If no key is passed, generate a random 16-byte key and create a cipher from it
+	if key == nil {
+		key := make([]byte, SYMMETRIC_KEY_LENGTH)
+		random.Bytes(key, stream)
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	// Encrypt and authenticate payload
+	encrypted := aesgcm.Seal(nil, nonce, data, additional)
+
+	return encrypted, nil
+}
+
+// Decrypt using AEAD
+func aeadDecrypt(ciphertext, nonce, key, additional []byte) ([]byte, error) {
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decrypt and verify payload
+	decrypted, err := aesgcm.Open(nil, nonce, ciphertext, additional)
+
+	return decrypted, err
+}
+
+// Encrypt using a stream cipher Blake2xb where key is used as the seed
+func streamEncrypt(data, key []byte) []byte {
+	ciphertext := make([]byte, len(data))
+	suite := curve25519.NewBlakeSHA256Curve25519(true)
+	xof := suite.XOF(key)
+	xof.XORKeyStream(ciphertext, data)
+
+	return ciphertext
+}
+
+// Encrypt using a stream cipher Blake2xb
+func streamDecrypt(ciphertext, key []byte) []byte {
+	data := make([]byte, len(ciphertext))
+	suite := curve25519.NewBlakeSHA256Curve25519(true)
+	xof := suite.XOF(key)
+	xof.XORKeyStream(data, ciphertext)
+
+	return data
+}
+
+// KDF derives a key from a purpose string and seed bytes
+func KDF(purpose string, seed []byte) []byte {
+	h := sha256.New()
+	h.Write([]byte(purpose))
+	h.Write(seed)
+	return h.Sum(nil)
+	//return pbkdf2.Key(password, nil, 1, 32, sha256.New)
 }
 
 func (si SuiteInfo) String() string {

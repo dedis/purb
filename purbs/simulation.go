@@ -16,6 +16,9 @@ import (
 	"time"
 )
 
+// Fixed for the simulation: 16-byte symmetric key + 4-byte offset position + 16-byte authentication tag
+const ENTRYPOINT_LENGTH = 16 + 4 + 16
+
 const simulationIsVerbose = false
 const simulationUsesSimplifiedLayout = false
 
@@ -48,15 +51,15 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 					Nonce:            nil,
 					Header:           nil,
 					Payload:          nil,
-					PayloadKey:       nil,
+					SessionKey:       nil,
 					Recipients:       recipients,
 					Stream:           random.New(),
 					OriginalData:     msg, // just for statistics
 					PublicParameters: publicFixedParams,
 					IsVerbose:        simulationIsVerbose,
 				}
-				purb.Nonce = purb.randomBytes(AEAD_NONCE_LENGTH)
-				purb.PayloadKey = purb.randomBytes(SYMMETRIC_KEY_LENGTH)
+				purb.Nonce = purb.randomBytes(NONCE_LENGTH)
+				purb.SessionKey = purb.randomBytes(SYMMETRIC_KEY_LENGTH)
 
 				// creation of the entrypoints and cornerstones, places entrypoint and cornerstones
 				purb.Header = newEmptyHeader()
@@ -83,7 +86,9 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 				resultsPayload.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 				// converts everything to []byte, performs the XOR trick on the cornerstones
 
-				purb.placePayloadAndCornerstones()
+				purb.placePayloadAndCornerstones(purb.Stream)
+
+				purb.addMAC()
 
 				resultsCSAndEPValues.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 
@@ -228,7 +233,7 @@ func SimulMeasureHeaderSize(nRepeat int, numRecipients []int) string {
 
 	si := createInfo()
 	key := make([]byte, SYMMETRIC_KEY_LENGTH)
-	nonce := make([]byte, AEAD_NONCE_LENGTH)
+	nonce := make([]byte, NONCE_LENGTH)
 	random.Bytes(key, random.New())
 	random.Bytes(nonce, random.New())
 
@@ -245,7 +250,7 @@ func SimulMeasureHeaderSize(nRepeat int, numRecipients []int) string {
 				Nonce:            nonce,
 				Header:           nil,
 				Payload:          nil,
-				PayloadKey:       key,
+				SessionKey:       key,
 				IsVerbose:        false,
 				Recipients:       decs,
 				Stream:           random.New(),
@@ -264,7 +269,7 @@ func SimulMeasureHeaderSize(nRepeat int, numRecipients []int) string {
 				Nonce:            nonce,
 				Header:           nil,
 				Payload:          nil,
-				PayloadKey:       key,
+				SessionKey:       key,
 				IsVerbose:        false,
 				Recipients:       decs,
 				Stream:           random.New(),
@@ -424,7 +429,7 @@ func SimulMeasureHeaderCompactness(nRepeat int, recipients []int, suites []int) 
 	resultsPURBs := new(Results)
 
 	key := make([]byte, SYMMETRIC_KEY_LENGTH)
-	nonce := make([]byte, AEAD_NONCE_LENGTH)
+	nonce := make([]byte, NONCE_LENGTH)
 	random.Bytes(key, random.New())
 	random.Bytes(nonce, random.New())
 
@@ -445,7 +450,7 @@ func SimulMeasureHeaderCompactness(nRepeat int, recipients []int, suites []int) 
 					Nonce:            nonce,
 					Header:           nil,
 					Payload:          nil,
-					PayloadKey:       key,
+					SessionKey:       key,
 					IsVerbose:        false,
 					Recipients:       decs,
 					Stream:           random.New(),
@@ -471,7 +476,7 @@ func SimulMeasureHeaderCompactness(nRepeat int, recipients []int, suites []int) 
 
 func createInfo() SuiteInfoMap {
 
-	entryPointLen := 16 + 4
+	entryPointLen := ENTRYPOINT_LENGTH
 	cornerstoneLen := 32
 
 	info := make(SuiteInfoMap)
@@ -493,11 +498,11 @@ func createDecoders(n int) []Recipient {
 	return decs
 }
 
-func shiftByAEAD_NONCE_LENGTH(pos []int) []int {
+func shiftByNONCE_LENGTH(pos []int) []int {
 	res := make([]int, len(pos))
 
 	for i := 0; i < len(pos); i++ {
-		res[i] = AEAD_NONCE_LENGTH + pos[i]
+		res[i] = NONCE_LENGTH + pos[i]
 	}
 
 	return res
@@ -516,32 +521,32 @@ func createMultiInfoReal(N int) SuiteInfoMap {
 	info := make(SuiteInfoMap)
 
 	info["PURB_A"] = &SuiteInfo{
-		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0}),
+		AllowedPositions:  shiftByNONCE_LENGTH([]int{0}),
 		CornerstoneLength: 64,
 		EntryPointLength:  48,
 	}
 	info["PURB_B"] = &SuiteInfo{
-		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 64}),
+		AllowedPositions:  shiftByNONCE_LENGTH([]int{0, 64}),
 		CornerstoneLength: 32,
 		EntryPointLength:  48,
 	}
 	info["PURB_C"] = &SuiteInfo{
-		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 64, 96}),
+		AllowedPositions:  shiftByNONCE_LENGTH([]int{0, 64, 96}),
 		CornerstoneLength: 64,
 		EntryPointLength:  80,
 	}
 	info["PURB_D"] = &SuiteInfo{
-		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 32, 64, 160}),
+		AllowedPositions:  shiftByNONCE_LENGTH([]int{0, 32, 64, 160}),
 		CornerstoneLength: 32,
 		EntryPointLength:  80,
 	}
 	info["PURB_E"] = &SuiteInfo{
-		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 64, 128, 192}),
+		AllowedPositions:  shiftByNONCE_LENGTH([]int{0, 64, 128, 192}),
 		CornerstoneLength: 64,
 		EntryPointLength:  64,
 	}
 	info["PURB_F"] = &SuiteInfo{
-		AllowedPositions:  shiftByAEAD_NONCE_LENGTH([]int{0, 32, 64, 96, 128, 256}),
+		AllowedPositions:  shiftByNONCE_LENGTH([]int{0, 32, 64, 96, 128, 256}),
 		CornerstoneLength: 32,
 		EntryPointLength:  64,
 	}
@@ -561,7 +566,7 @@ func createMultiInfoReal(N int) SuiteInfoMap {
 
 func createMultiInfo(N int) SuiteInfoMap {
 
-	entryPointLen := 16 + 4
+	entryPointLen := ENTRYPOINT_LENGTH
 	cornerstoneLen := 32
 	aeadNonceLen := 12
 

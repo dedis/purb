@@ -1,8 +1,7 @@
 package purbs
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
@@ -12,7 +11,7 @@ import (
 )
 
 // Decode takes a PURB blob and a recipient info (suite+KeyPair) and extracts the payload
-func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublicFixedParameters, verbose bool) (bool, []byte, error) {
+func Decode(blob []byte, recipient *Recipient, publicFixedParameters *PurbPublicFixedParameters, verbose bool) (bool, []byte, error) {
 	suiteName := recipient.SuiteName
 	suiteInfo := publicFixedParameters.SuiteInfoMap[suiteName]
 
@@ -23,6 +22,9 @@ func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 	if suiteInfo == nil {
 		return false, nil, errors.New("no positions suiteInfo for this suite")
 	}
+
+	// we must not take MAC into account when computing public-key XOR
+	data := blob[ : len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
 
 	// XOR all the possible suite positions to computer the cornerstone value
 	cornerstone := make([]byte, suiteInfo.CornerstoneLength)
@@ -53,7 +55,7 @@ func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 		log.LLvlf3("Recovered cornerstone has value %v, len %v", cornerstone, len(cornerstone))
 	}
 
-	//Now that we have the PayloadKey for our suite, calculate the shared PayloadKey
+	//Now that we have the SessionKey for our suite, calculate the shared SessionKey
 	pubKey := recipient.Suite.Point()
 	pubKey.(kyber.Hiding).HideDecode(cornerstone)
 
@@ -62,29 +64,29 @@ func Decode(data []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 	if err != nil {
 		return false, nil, err
 	}
-	sharedSecret := KDF(sharedBytes)
+	sharedSecret := KDF("", sharedBytes)
 
 	if verbose {
 		log.LLvlf3("Recovered sharedbytes value %v, len %v", sharedBytes, len(sharedBytes))
 		log.LLvlf3("Recovered sharedsecret value %v, len %v", sharedSecret, len(sharedSecret))
 	}
 
-	// Now we try to decrypt iteratively the entrypoints and check if the decrypted PayloadKey works for AEAD of payload
+	// Now we try to decrypt iteratively the entrypoints and check if the decrypted SessionKey works for AEAD of payload
 	if !publicFixedParameters.SimplifiedEntrypointsPlacement {
-		return entrypointTrialDecode(data, recipient, sharedSecret, suiteInfo, publicFixedParameters.HashTableCollisionLinearResolutionAttempts, verbose)
+		return entrypointTrialDecode(blob, recipient, sharedSecret, suiteInfo, publicFixedParameters.HashTableCollisionLinearResolutionAttempts, verbose)
 	}
-	return entrypointTrialDecodeSimplified(data, recipient, sharedSecret, suiteInfo, verbose)
+	return entrypointTrialDecodeSimplified(blob, recipient, sharedSecret, suiteInfo, verbose)
 }
 
-func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, hashTableLinearResolutionCollisionAttempt int, verbose bool) (bool, []byte, error) {
+func entrypointTrialDecode(blob []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, hashTableLinearResolutionCollisionAttempt int, verbose bool) (bool, []byte, error) {
 
-	hash := sha256.New()
-	hash.Write(sharedSecret)
-	intOfHashedValue := int(binary.BigEndian.Uint32(hash.Sum(nil))) // Large number to become a position
-
+	intOfHashedValue := int(binary.BigEndian.Uint32(KDF("pos", sharedSecret))) // Large number to become a position
 	tableSize := 1
 	hashTableStartPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
+	entrypointKey := KDF("key", sharedSecret)
+	nonce := blob[:NONCE_LENGTH]
+	data := blob[ : len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
 	for {
 		var entrypointIndexInHashTable int
 
@@ -100,10 +102,10 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 				break
 			}
 
-			xof := recipient.Suite.XOF(sharedSecret)
-
-			decrypted := make([]byte, suiteInfo.EntryPointLength)
-			xof.XORKeyStream(decrypted, data[entrypointStartPos:entrypointEndPos])
+			decrypted, err := aeadDecrypt(data[entrypointStartPos:entrypointEndPos], nonce, entrypointKey, nil)
+			if err != nil {
+				continue // it is not the correct entry point so we move one to try again
+			}
 
 			if verbose {
 				log.LLvlf3("Recovering potential entrypoint [%v:%v], value %v", entrypointStartPos, entrypointEndPos, data[entrypointStartPos:entrypointEndPos])
@@ -111,7 +113,12 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 				log.LLvlf3("  yield %v", decrypted)
 			}
 
-			found, errorReason, message := entrypointTrialDecrypt(decrypted, data)
+			ok := verifyMAC(decrypted, blob)
+			if !ok {
+				return false, nil, errors.New("authentication tag is invalid")
+			}
+
+			found, errorReason, message := payloadDecrypt(decrypted, data)
 
 			if verbose {
 				log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
@@ -131,20 +138,28 @@ func entrypointTrialDecode(data []byte, recipient *Recipient, sharedSecret []byt
 			return false, nil, errors.New("no entrypoint was correctly decrypted")
 		}
 	}
-
-	return false, nil, errors.New("no entrypoint was correctly decrypted")
 }
 
-func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, verbose bool) (bool, []byte, error) {
+func entrypointTrialDecodeSimplified(blob []byte, recipient *Recipient, sharedSecret []byte, suiteInfo *SuiteInfo, verbose bool) (bool, []byte, error) {
 	startPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
+	entrypointKey := KDF("key", sharedSecret)
+	nonce := blob[:NONCE_LENGTH]
+	data := blob[:len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
 	for startPos+suiteInfo.EntryPointLength < len(data) {
 		entrypointBytes := data[startPos : startPos+suiteInfo.EntryPointLength]
+		decrypted, err := aeadDecrypt(entrypointBytes, nonce, entrypointKey, nil)
+		if err != nil {
+			startPos += suiteInfo.EntryPointLength
+			continue // it is not the correct entry point so we move one to try again
+		}
 
-		xof := recipient.Suite.XOF(sharedSecret)
-		decrypted := make([]byte, suiteInfo.EntryPointLength)
-		xof.XORKeyStream(decrypted, entrypointBytes)
-		found, errorReason, message := entrypointTrialDecrypt(decrypted, data)
+		ok := verifyMAC(decrypted, blob)
+		if !ok {
+			return false, nil, errors.New("authentication tag is invalid")
+		}
+
+		found, errorReason, message := payloadDecrypt(decrypted, data)
 
 		if verbose {
 			log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
@@ -152,55 +167,45 @@ func entrypointTrialDecodeSimplified(data []byte, recipient *Recipient, sharedSe
 		if found {
 			return found, message, nil
 		}
-
-		startPos += suiteInfo.EntryPointLength
 	}
 
 	return false, nil, errors.New("no entrypoint was correctly decrypted")
 }
 
-func entrypointTrialDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {
+// verifies the authentication tag of a PURB
+func verifyMAC(entrypoint []byte, blob []byte) bool {
+	sessionKey := entrypoint[0:SYMMETRIC_KEY_LENGTH]
+	macKey := KDF("mac", sessionKey)
 
+	data := blob[ : len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
+	tag := blob[len(blob)-MAC_AUTHENTICATION_TAG_LENGTH : ]
+
+	mac := hmac.New(sha256.New, macKey)
+	mac.Write(data)
+	computedMAC := mac.Sum(nil)
+	return hmac.Equal(computedMAC, tag)
+}
+
+func payloadDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {
 	// verify pointer to payload
 	pointerPos := len(entrypoint) - OFFSET_POINTER_LEN
-	pointerBytes := entrypoint[pointerPos:]
+	pointerBytes := entrypoint[pointerPos : pointerPos+OFFSET_POINTER_LEN]
 	pointer := int(binary.BigEndian.Uint32(pointerBytes))
 	if pointer > len(fullPURBBlob) {
 		// the pointer is pointing outside the blob
 		return false, "entrypoint pointer is invalid", nil
 	}
 
-	// compute PayloadKey from entrypoint, create the decoder
-	key := entrypoint[0:pointerPos]
+	// compute SessionKey from entrypoint, create the decoder
+	sessionKey := entrypoint[0:pointerPos]
 	payload := fullPURBBlob[pointer:]
-	nonce := fullPURBBlob[:AEAD_NONCE_LENGTH]
 
-	msg, err := aeadDecrypt(payload, nonce, key, nil)
-	if err != nil {
-		return false, "aead opening error", nil
-	}
+	key := KDF("enc", sessionKey)
+	msg := streamDecrypt(payload, key)
 
 	if len(msg) != 0 {
 		msg = unPad(msg)
 	}
 
 	return true, "", msg
-}
-
-// Decrypt using AEAD
-func aeadDecrypt(ciphertext, nonce, key, additional []byte) ([]byte, error) {
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-
-	// Encrypt and authenticate payload
-	decrypted, err := aesgcm.Open(nil, nonce, ciphertext, additional)
-
-	return decrypted, err
 }
