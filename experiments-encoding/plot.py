@@ -162,6 +162,8 @@ def plotEncodingTime():
 def plotEncodingPrecise():
     encode = readAndProcessTwoLevels('encode_precise.json')
 
+    all = ['mac', 'header-encrypt', 'payload', 'asym-crypto', 'shared-secrets']
+    
     labels = {}
     labels['asym-crypto'] = 'KeyGen'
     labels['shared-secrets'] = 'SharedSecrets'
@@ -226,16 +228,6 @@ def plotEncodingPrecise():
             suite_counter += 1
 
         data_type_counter += 1
-
-    all = ['mac', 'header-encrypt', 'payload', 'asym-crypto', 'shared-secrets']
-    for encode_type in all:
-        if encode_type not in encode:
-            print("Skipping", encode_type, "not found in data")
-            continue
-
-        data = encode[encode_type]
-        grouped_by_suite = groupByKey(data, "nSuites")
-        
 
     ticks = []
     ticks_positions = []
