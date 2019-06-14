@@ -224,6 +224,53 @@ def plotEncodingPrecise():
 
             plt.bar(pos, Ys, bottom=bottoms, width=width, color=barcolors[data_type_counter], edgecolor='black', label='', hatch=patterns[suite_counter])
 
+            i = 0
+            while i < len(Ys):
+                lastValues[pos[i]] += Ys[i]
+                i += 1
+
+            suite_counter += 1
+
+        data_type_counter += 1
+
+
+    # tendency line on top
+    tendency_xpos = []
+    tendency_ypos_dict = dict()
+
+    # plot tendency line
+    data_type_counter = 0
+    for encode_type in all:
+
+        if encode_type not in encode:
+            print("Skipping", encode_type, "not found in data")
+            continue
+
+        data = encode[encode_type]
+
+        grouped_by_suite = groupByKey(data, "nSuites")
+
+        suite_counter = 0
+        for nsuite in grouped_by_suite:
+            data2 = grouped_by_suite[nsuite]
+            data3 = groupByKeyAndGetStats(data2, key="nRecipients")
+
+            Xs = [x for x in data3]
+            pos = [((len(nSuites) + 1) * x) + suite_counter for x in np.arange(len(data3))]
+            Ys = [data3[x]['mean2'] for x in data3]
+            Yerr = [data3[x]['err2'] for x in data3]
+
+            # do not display if we have more suite than recipients
+            i = 0
+            while i < len(Xs):
+                if Xs[i] < nsuite:
+                    Ys[i] = 0
+                i += 1
+
+            bottoms=[]
+            for p in pos:
+                bottoms.append(lastValues[p])
+
             # compute tendency line
             tendency_xpos.extend(pos)
             for i in range(len(pos)):
@@ -231,11 +278,6 @@ def plotEncodingPrecise():
                     tendency_ypos_dict[str(pos[i])] = []
 
                 tendency_ypos_dict[str(pos[i])].append(Ys[i])
-
-            i = 0
-            while i < len(Ys):
-                lastValues[pos[i]] += Ys[i]
-                i += 1
 
             suite_counter += 1
 
