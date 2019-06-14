@@ -22,7 +22,7 @@ def prepare_for_latex():
               'axes.titlesize': 18,
               'font.size': 18, # was 10
               'legend.fontsize': 15, # was 10
-              'legend.loc': 'upper left',
+              # 'legend.loc': 'upper left',
               'lines.markersize': 9,
               'xtick.labelsize': 18,
               'ytick.labelsize': 18,
@@ -133,10 +133,10 @@ def median_and_deviation(elems):
     a = np.array(elems)
     a = a.astype(np.float)
     dev = a.std()
-    # devs = enumerate([abs(elem - dev) for elem in a])
-    # outlier = max(devs, key=lambda k: k[1])
-    # a = np.delete(a, outlier[0])
-    # dev = a.std()
-    # mean = a.mean()
+    devs = enumerate([abs(elem - dev) for elem in a])
+    outlier = max(devs, key=lambda k: k[1])
+    a = np.delete(a, outlier[0])
+    dev = a.std()
+    mean = a.mean()
     median = np.median(a)
     return median, dev
