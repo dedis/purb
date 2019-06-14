@@ -19,6 +19,7 @@ import (
 // Fixed for the simulation: 16-byte symmetric key + 4-byte offset position + 16-byte authentication tag
 const ENTRYPOINT_LENGTH = 16 + 4 + 16
 
+const MESSAGE_SIZE = 1024 * 10 // 10 KB
 const simulationIsVerbose = false
 const simulationUsesSimplifiedLayout = false
 
@@ -27,18 +28,18 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 	l := log.New(os.Stderr, "", 0)
 
 	resultsPKGen := new(Results)
-	resultsKDFs := new(Results)
-	resultsEPPlace := new(Results)
+	resultsSharedSecrets := new(Results)
+	resultsLayout := new(Results)
 	resultsPayload := new(Results)
-	resultsCSAndEPValues := new(Results)
-	resultsMapToBytes := new(Results)
+	resultsHeaderEncrypt := new(Results)
+	resultsMAC := new(Results)
 
 	m := newMonitor()
 	for _, nSuites := range suites {
 		for _, nRecipients := range recipients {
 			for k := 0; k < nRepeat; k++ {
 
-				msg := simulGetRandomBytes(100)
+				msg := simulGetRandomBytes(MESSAGE_SIZE)
 
 				l.Println("Simulating for", nRecipients, "recipients,", nSuites, "suites,", k, "/", nRepeat)
 
@@ -69,7 +70,7 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 				resultsPKGen.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 
 				purb.createEntryPoints()
-				resultsKDFs.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
+				resultsSharedSecrets.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 
 				purb.placeCornerstones()
 
@@ -78,7 +79,7 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 				} else {
 					purb.placeEntrypoints()
 				}
-				resultsEPPlace.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
+				resultsLayout.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 
 				// creation of the encrypted payload
 				purb.padThenEncryptData(msg, purb.Stream)
@@ -88,12 +89,13 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 
 				purb.placePayloadAndCornerstones(purb.Stream)
 
-				purb.addMAC()
+				resultsHeaderEncrypt.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 
-				resultsCSAndEPValues.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
+				// compute MAC
+				purb.addMAC()
+				resultsMAC.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.record())
 
 				blob := purb.ToBytes()
-				resultsMapToBytes.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.record())
 
 				success, out, err := Decode(blob, &recipients[0], publicFixedParams, simulationIsVerbose)
 				if !success || !bytes.Equal(out, msg) {
@@ -108,11 +110,11 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 
 	s := "{"
 	s += "\"asym-crypto\": " + resultsPKGen.String() + ","
-	s += "\"kdfs\": " + resultsKDFs.String() + ","
-	s += "\"placement\": " + resultsEPPlace.String() + ","
+	s += "\"shared-secrets\": " + resultsSharedSecrets.String() + ","
+	s += "\"layout\": " + resultsLayout.String() + ","
 	s += "\"payload\": " + resultsPayload.String() + ","
-	s += "\"cs-ep-values\": " + resultsCSAndEPValues.String() + ","
-	s += "\"byte-map\": " + resultsMapToBytes.String()
+	s += "\"header-encrypt\": " + resultsHeaderEncrypt.String() + ","
+	s += "\"mac\": " + resultsMAC.String()
 	s += "}"
 
 	return s
@@ -122,7 +124,7 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) string {
 	l := log.New(os.Stderr, "", 0)
 
-	msg := simulGetRandomBytes(100)
+	msg := simulGetRandomBytes(MESSAGE_SIZE)
 
 	resultsPGP := new(Results)
 	resultsPGPHidden := new(Results)
@@ -294,14 +296,14 @@ func SimulMeasureHeaderSize(nRepeat int, numRecipients []int) string {
 func SimulDecode(nRepeat int, payloadLength int, nRecipients []int) string {
 	l := log.New(os.Stderr, "", 0)
 
-	msg := simulGetRandomBytes(100)
+	msg := simulGetRandomBytes(MESSAGE_SIZE)
 
 	resultsPGP := new(Results)
 	resultsPGPHidden := new(Results)
 	resultsPURBFlat := new(Results)
 	resultsPURB := new(Results)
 
-	nSuites := 3
+	nSuites := 1
 
 	m := newMonitor()
 	for _, nRecipients := range nRecipients {

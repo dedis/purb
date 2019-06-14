@@ -1,7 +1,7 @@
 .PHONY: simul clean plot-encode plot-encode-precise plot-decode plot-header-size plot-header-compactness
 
 simul:
-	go run -tags=vartime simul.go e > encode.json
+    # go run -tags=vartime simul.go e > encode.json
 	go run -tags=vartime simul.go d > decode.json
 	go run -tags=vartime simul.go h > header_sizes.json
 	go run -tags=vartime simul.go p > encode_precise.json

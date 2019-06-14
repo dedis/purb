@@ -12,8 +12,10 @@ import (
 
 const REPEAT = 20
 const PAYLOAD_SIZE = 1000 * 8
-const RECIPIENTS_STR = "1,10,100" //100,1000,10000"
-const SUITES_STR = "1,3,10"
+const RECIPIENTS_HEADER_STR = "1,10,100" //100,1000,10000"
+const RECIPIENTS_ENCODING_STR = "1,3,10,100" //100,1000,10000"
+const RECIPIENTS_DECODING_STR = "1,10,100,1000,10000"
+const SUITES_ENCODING_STR = "1,3,10"
 
 func main() {
 	app := cli.NewApp()
@@ -52,8 +54,8 @@ func main() {
 func encoding(c *cli.Context) {
 	l := log.New(os.Stderr, "", 0)
 
-	recipients := toIntArray(RECIPIENTS_STR)
-	suites := toIntArray(SUITES_STR)
+	recipients := toIntArray(RECIPIENTS_ENCODING_STR)
+	suites := toIntArray(SUITES_ENCODING_STR)
 
 	l.Println("-------------------------------------------------------")
 	l.Println("Computing Encoding times for various number of recipients/suites")
@@ -64,8 +66,8 @@ func encoding(c *cli.Context) {
 func encodingPrecise(c *cli.Context) {
 	l := log.New(os.Stderr, "", 0)
 
-	recipients := toIntArray("1,10,100")
-	suites := toIntArray(SUITES_STR)
+	recipients := toIntArray(RECIPIENTS_ENCODING_STR)
+	suites := toIntArray(SUITES_ENCODING_STR)
 
 	l.Println("-------------------------------------------------------")
 	l.Println("Computing Precise Encoding times for various number of recipients/suites")
@@ -76,7 +78,7 @@ func encodingPrecise(c *cli.Context) {
 func headerSize(c *cli.Context){
 	l := log.New(os.Stderr, "", 0)
 
-	recipients := toIntArray(RECIPIENTS_STR)
+	recipients := toIntArray(RECIPIENTS_HEADER_STR)
 
 	l.Println("-------------------------------------------------------")
 	l.Println("Computing Header size for various number of recipients")
@@ -88,8 +90,8 @@ func headerSize(c *cli.Context){
 func headerCompactness(c *cli.Context){
 	l := log.New(os.Stderr, "", 0)
 
-	recipients := toIntArray(RECIPIENTS_STR)
-	suites := toIntArray(SUITES_STR)
+	recipients := toIntArray(RECIPIENTS_HEADER_STR)
+	suites := toIntArray(SUITES_ENCODING_STR)
 
 	l.Println("-------------------------------------------------------")
 	l.Println("Computing Header compactness for various number of recipients/suites")
@@ -100,7 +102,7 @@ func headerCompactness(c *cli.Context){
 func decoding(c *cli.Context) {
 	l := log.New(os.Stderr, "", 0)
 
-	recipients := toIntArray(RECIPIENTS_STR)
+	recipients := toIntArray(RECIPIENTS_DECODING_STR)
 
 	l.Println("-------------------------------------------------------")
 	l.Println("Computing Decoding time for various number of recipients")

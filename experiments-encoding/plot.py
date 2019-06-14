@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
@@ -7,14 +6,13 @@ import sys
 from utils import *
 
 # colors and constants
-colors = ['#0000FF', '#FF0000', '#800080', '#1E90FF', '#8A2BE2', '#FFA500', '#00FF00', '#F0F0F0']
-fillcolors = [c + "AA" for c in colors]
-markers = ['D', 'x', 'o', 'd']
+colors = ['#E2DC27', '#071784', '#077C0F', '#BC220A']
+devcolors = ['#FFFDCD', '#CDE1FF', '#FFDFD1', '#D4FFE3']
+# barcolors = ['#c2c0bf', '#FFFDCD', '#CDE1FF', '#FFDFD1', '#D4FFE3']
+barcolors = ['#EBEBEB', '#FFE5CC', '#CCE5FF', ]
+markers = ['d', 's', 'x', '.']
 linestyles = ['--', ':', '-', '-.']
 patterns = ['', '.', '//']
-mpl.rcParams['text.latex.preamble'] = [r'\usepackage{sansmath}', r'\sansmath']
-mpl.rcParams['text.usetex'] = True
-mpl.rcParams.update({'font.size': 16})
 
 
 def plotHeaderSize():
@@ -64,7 +62,7 @@ def plotHeaderCompactness():
         Ys = [100 * (1 - v[x]['mean2']) for x in v]
         Yerr = [100 * v[x]['err2'] for x in v]
 
-        plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[suite_counter], label=str(nsuite)+" Suites", marker=markers[suite_counter], linestyle=linestyles[suite_counter],capsize=2)
+        plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[suite_counter+1], label=str(nsuite)+" Suites", marker=markers[suite_counter], linestyle=linestyles[suite_counter],capsize=2)
         suite_counter += 1
 
 
@@ -72,7 +70,7 @@ def plotHeaderCompactness():
     plt.tick_params(axis='y', labelsize=16)
     plt.legend()
     plt.xscale('log')
-    plt.ylabel('Percentage of useful bits, \\%')
+    plt.ylabel('Percentage of useful bits in the header [\\%]')
     plt.xlabel('Number of Recipients')
     axes = plt.gca()
     axes.set_ylim([0,105])
@@ -82,7 +80,13 @@ def plotHeaderCompactness():
 
 
 def plotDecodeTime():
-    decode = readAndProcessTwoLevels('decode.json')
+    decode = readAndProcessTwoLevels('results/decode.json')
+
+    labels = {}
+    labels['pgp'] = 'PGP standard'
+    labels['pgp-hidden'] = 'PGP hidden'
+    labels['purb-flat'] = 'PURBs flat'
+    labels['purb'] = 'PURBs standard'
 
     i = 0
     for decode_type in decode:
@@ -92,14 +96,14 @@ def plotDecodeTime():
 
         Xs = [x for x in v]
         Ys = [v[x]['mean2'] for x in v]
-        Yerr = [v[x]['err2'] for x in v]
+        Yerrup = [v[x]['mean2'] + v[x]['err2'] for x in v]
+        Yerrdown = [v[x]['mean2'] - v[x]['err2'] for x in v]
 
-        plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[i], label=decode_type, marker=markers[i], linestyle=linestyles[i],capsize=2)
+        # plt.errorbar(Xs, Ys, yerr=Yerr, color=decoding_colors[i], label=decode_type, marker=markers[i], linestyle=linestyles[i],capsize=2)
+        plt.loglog(Xs, Ys, color=colors[i], label=labels[decode_type], marker=markers[i], linestyle=linestyles[i])
+        plt.fill_between(Xs, Yerrdown, Yerrup, facecolor=devcolors[i])
         i += 1
 
-        
-    plt.tick_params(axis='x', labelsize=16)
-    plt.tick_params(axis='y', labelsize=16)
 
     plt.legend()
     plt.ylabel('Decoding time [ms]')
@@ -108,7 +112,13 @@ def plotDecodeTime():
     plt.axis()
     plt.xscale('log')
     plt.yscale('log')
+    plt.xlim(0.8, 13000)
+    # Gap explaining line
+    plt.annotate("", xy=(1, 0.1), xytext=(1, 6), arrowprops=dict(arrowstyle='<|-|>', linestyle='--', color='black'))
+    plt.text(1.1, 0.25, 'Assembly-', fontsize=16, rotation='vertical', color='black')
+    plt.text(1.55, 0.2, 'optimization', fontsize=16, rotation='vertical', color='black')
     plt.show()
+    # plt.savefig('decode.eps', format='eps', dpi=300)
 
 def plotEncodingTime():
     encode = readAndProcessTwoLevels('encode.json')
@@ -153,10 +163,9 @@ def plotEncodingPrecise():
     encode = readAndProcessTwoLevels('encode_precise.json')
 
     labels = {}
-    labels['cs-ep-values'] = 'EP+CS Creation'
-    labels['placement'] = 'Placement'
     labels['asym-crypto'] = 'KeyGen'
-    labels['kdfs'] = 'SharedSecrets'
+    labels['shared-secrets'] = 'SharedSecrets'
+    labels['header-encrypt'] = 'HeaderEnc'
     width = 0.8
 
     #merge "payload", "CS-place", "" into "others"
@@ -173,7 +182,7 @@ def plotEncodingPrecise():
     # sets where each colum start Y-wise (stacked bar)
     lastValues = [0 for x in range(0,(len(nSuites)+1) * len(nRecipients))]
 
-    order = ['cs-ep-values', 'placement', 'asym-crypto', 'kdfs']
+    order = ['header-encrypt', 'asym-crypto', 'shared-secrets']
 
     # start plotting loop
     data_type_counter = 0
@@ -207,7 +216,7 @@ def plotEncodingPrecise():
             for p in pos:
                 bottoms.append(lastValues[p])
 
-            plt.bar(pos, Ys, bottom=bottoms, width=width, color=fillcolors[data_type_counter], edgecolor='black', label='', hatch=patterns[suite_counter])
+            plt.bar(pos, Ys, bottom=bottoms, width=width, color=barcolors[data_type_counter], edgecolor='black', label='', hatch=patterns[suite_counter])
 
             i = 0
             while i < len(Ys):
@@ -217,6 +226,16 @@ def plotEncodingPrecise():
             suite_counter += 1
 
         data_type_counter += 1
+
+    all = ['mac', 'header-encrypt', 'payload', 'asym-crypto', 'shared-secrets']
+    for encode_type in all:
+        if encode_type not in encode:
+            print("Skipping", encode_type, "not found in data")
+            continue
+
+        data = encode[encode_type]
+        grouped_by_suite = groupByKey(data, "nSuites")
+        
 
     ticks = []
     ticks_positions = []
@@ -240,7 +259,7 @@ def plotEncodingPrecise():
     legends = []
     i = 0
     for encode_type in order:
-        data_serie = mpatches.Patch(facecolor=fillcolors[i], edgecolor='black', label=labels[encode_type])
+        data_serie = mpatches.Patch(facecolor=barcolors[i], edgecolor='black', label=labels[encode_type])
         legends.append(data_serie)
         i += 1
 
@@ -253,13 +272,14 @@ def plotEncodingPrecise():
         legends.append(data_serie)
         i += 1
 
-    plt.legend(handles=legends, ncol=2, fontsize=13,labelspacing=0.2, columnspacing=1)
+    plt.legend(handles=legends, ncol=2, labelspacing=0.2, columnspacing=1)
 
     plt.show()
 
 if len(sys.argv) == 1:
     print("Usage: ./plot.py e|d|h|c|p, for Encode,Decode,HeaderSize,Compactness,encode Precise(stacked bars)")
 else:
+    prepare_for_latex()
     if sys.argv[1] == 'e':
         plotEncodingTime()
     if sys.argv[1] == 'h':
