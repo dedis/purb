@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from matplotlib.lines import Line2D
 import numpy as np
 import sys
 from utils import *
@@ -42,7 +43,7 @@ def plotHeaderSize():
     #plt.yscale('log')
     plt.ylabel('Header Size [B]')
     plt.xlabel('Number of Recipients')
-    plt.grid(True, which="major", axis='both')
+    plt.grid(True, which="major", axis='y')
     plt.axis()
     plt.show()
 
@@ -62,13 +63,15 @@ def plotHeaderCompactness():
         Ys = [100 * (1 - v[x]['mean2']) for x in v]
         Yerr = [100 * v[x]['err2'] for x in v]
 
-        plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[suite_counter+1], label=str(nsuite)+" Suites", marker=markers[suite_counter], linestyle=linestyles[suite_counter],capsize=2)
+        if nsuite == 1:
+            lbl = str(nsuite)+" Suite"
+        else:
+            lbl = str(nsuite)+" Suites"
+        plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[suite_counter+1], label=lbl, marker=markers[suite_counter], linestyle=linestyles[suite_counter],capsize=2)
         suite_counter += 1
 
 
-    plt.tick_params(axis='x', labelsize=16)
-    plt.tick_params(axis='y', labelsize=16)
-    plt.legend()
+    plt.legend(loc='lower left', fontsize=18)
     plt.xscale('log')
     plt.ylabel('Percentage of useful bits in the header [\\%]')
     plt.xlabel('Number of Recipients')
@@ -80,7 +83,7 @@ def plotHeaderCompactness():
 
 
 def plotDecodeTime():
-    decode = readAndProcessTwoLevels('results/decode.json')
+    decode = readAndProcessTwoLevels('decode.json')
 
     labels = {}
     labels['pgp'] = 'PGP standard'
@@ -114,9 +117,9 @@ def plotDecodeTime():
     plt.yscale('log')
     plt.xlim(0.8, 13000)
     # Gap explaining line
-    plt.annotate("", xy=(1, 0.1), xytext=(1, 6), arrowprops=dict(arrowstyle='<|-|>', linestyle='--', color='black'))
-    plt.text(1.1, 0.25, 'Assembly-', fontsize=16, rotation='vertical', color='black')
-    plt.text(1.55, 0.2, 'optimization', fontsize=16, rotation='vertical', color='black')
+    plt.annotate("", xy=(Xs[0], 0.1), xytext=(Xs[0], 6), arrowprops=dict(arrowstyle='<|-|>', linestyle='--', color='black'))
+    plt.text(Xs[0] + 0.1, 0.25, 'Assembly-', fontsize=16, rotation='vertical', color='black')
+    plt.text(Xs[0] + 0.55, 0.2, 'optimization', fontsize=16, rotation='vertical', color='black')
     plt.show()
     # plt.savefig('decode.eps', format='eps', dpi=300)
 
@@ -167,7 +170,7 @@ def plotEncodingPrecise():
     labels = {}
     labels['asym-crypto'] = 'KeyGen'
     labels['shared-secrets'] = 'SharedSecrets'
-    labels['header-encrypt'] = 'HeaderEnc'
+    labels['header-encrypt'] = 'EncHeader'
     width = 0.8
 
     #merge "payload", "CS-place", "" into "others"
@@ -302,24 +305,6 @@ def plotEncodingPrecise():
     plt.yscale('log')
     plt.grid(True, which="major", axis='y')
 
-    legends = []
-    i = 0
-    for encode_type in order:
-        data_serie = mpatches.Patch(facecolor=barcolors[i], edgecolor='black', label=labels[encode_type])
-        legends.append(data_serie)
-        i += 1
-
-    i = 0
-    while i < len(nSuites):
-        l = str(nSuites[i]) + ' suite'
-        if nSuites[i] != 1:
-            l+='s'
-        data_serie = mpatches.Patch(facecolor='white', edgecolor='black', hatch=patterns[i], label=l)
-        legends.append(data_serie)
-        i += 1
-
-    plt.legend(handles=legends, ncol=2, labelspacing=0.2, columnspacing=1)
-
     tendency_xpos = list(set(tendency_xpos))
     tendency_ypos = []
     for key_int in sorted([int(x) for x in tendency_ypos_dict]):
@@ -338,7 +323,30 @@ def plotEncodingPrecise():
             del(tendency_ypos[i])
         i -= 1
 
-    plt.plot(tendency_xpos, tendency_ypos, label="Tendency line")
+    trend_marker = 'x'
+    trend_color = '#3aff28'
+    trend_label = 'Total time'
+    plt.plot(tendency_xpos, tendency_ypos, color=trend_color, marker=trend_marker, label=trend_label)
+
+    legends = []
+    i = 0
+    for encode_type in order:
+        data_serie = mpatches.Patch(facecolor=barcolors[i], edgecolor='black', label=labels[encode_type])
+        legends.append(data_serie)
+        i += 1
+
+    legends.append(Line2D([0], [0], color=trend_color, marker=trend_marker, label=trend_label))
+
+    i = 0
+    while i < len(nSuites):
+        l = str(nSuites[i]) + ' suite'
+        if nSuites[i] != 1:
+            l+='s'
+        data_serie = mpatches.Patch(facecolor='white', edgecolor='black', hatch=patterns[i], label=l)
+        legends.append(data_serie)
+        i += 1
+
+    plt.legend(handles=legends, loc='center left', bbox_to_anchor=(0, 0.3), ncol=2, labelspacing=0.2, columnspacing=1)
 
     plt.show()
 
