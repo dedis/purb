@@ -24,7 +24,7 @@ func Decode(blob []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 	}
 
 	// we must not take MAC into account when computing public-key XOR
-	data := blob[ : len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
+	data := blob[:len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
 
 	// XOR all the possible suite positions to computer the cornerstone value
 	cornerstone := make([]byte, suiteInfo.CornerstoneLength)
@@ -86,7 +86,7 @@ func entrypointTrialDecode(blob []byte, recipient *Recipient, sharedSecret []byt
 
 	entrypointKey := KDF("key", sharedSecret)
 	nonce := blob[:NONCE_LENGTH]
-	data := blob[ : len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
+	data := blob[:len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
 	for {
 		var entrypointIndexInHashTable int
 
@@ -177,8 +177,8 @@ func verifyMAC(entrypoint []byte, blob []byte) bool {
 	sessionKey := entrypoint[0:SYMMETRIC_KEY_LENGTH]
 	macKey := KDF("mac", sessionKey)
 
-	data := blob[ : len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
-	tag := blob[len(blob)-MAC_AUTHENTICATION_TAG_LENGTH : ]
+	data := blob[:len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
+	tag := blob[len(blob)-MAC_AUTHENTICATION_TAG_LENGTH:]
 
 	mac := hmac.New(sha256.New, macKey)
 	mac.Write(data)
