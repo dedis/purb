@@ -186,6 +186,10 @@ def plotEncodingPrecise():
 
     order = ['header-encrypt', 'asym-crypto', 'shared-secrets']
 
+    # tendency line on top
+    tendency_xpos = []
+    tendency_ypos_dict = dict()
+
     # start plotting loop
     data_type_counter = 0
     for encode_type in order:
@@ -219,6 +223,14 @@ def plotEncodingPrecise():
                 bottoms.append(lastValues[p])
 
             plt.bar(pos, Ys, bottom=bottoms, width=width, color=barcolors[data_type_counter], edgecolor='black', label='', hatch=patterns[suite_counter])
+
+            # compute tendency line
+            tendency_xpos.extend(pos)
+            for i in range(len(pos)):
+                if str(pos[i]) not in tendency_ypos_dict:
+                    tendency_ypos_dict[str(pos[i])] = []
+
+                tendency_ypos_dict[str(pos[i])].append(Ys[i])
 
             i = 0
             while i < len(Ys):
@@ -265,6 +277,26 @@ def plotEncodingPrecise():
         i += 1
 
     plt.legend(handles=legends, ncol=2, labelspacing=0.2, columnspacing=1)
+
+    tendency_xpos = list(set(tendency_xpos))
+    tendency_ypos = []
+    for key_int in sorted([int(x) for x in tendency_ypos_dict]):
+        key = str(key_int)
+        # value of the tendency line at this point is the sum
+        acc = 0
+        for yval in tendency_ypos_dict[key]:
+            acc += yval
+        tendency_ypos.append(acc)
+
+    #filter the zero values
+    i = len(tendency_xpos) - 1
+    while i >= 0:
+        if tendency_ypos[i] == 0:
+            del(tendency_xpos[i])
+            del(tendency_ypos[i])
+        i -= 1
+
+    plt.plot(tendency_xpos, tendency_ypos, label="Tendency line")
 
     plt.show()
 
