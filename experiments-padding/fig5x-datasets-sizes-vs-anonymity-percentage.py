@@ -9,11 +9,8 @@ import math
 from colors import *
 from padme import *
 import glob
-
-
 import matplotlib
-
-matplotlib.rcParams.update({'font.size': font_size})
+import utils as utils
 
 def mean(vals):
     acc = 0.
@@ -75,6 +72,8 @@ def extractCurves(buckets, minKey, maxXKey):
 
 def plot(j, input_file):
     plt.figure(j)
+    utils.prepare_for_latex()
+
     Ls = []             # the raw L's values
     Ls_count = {}       # a dictionary [packet size] -> [number of packets with this size]
 
@@ -140,7 +139,7 @@ def plot(j, input_file):
 
     #plt.title('Anonymity set w.r.t size, '+input_file)
     plt.xlabel('File sizes [bits]')
-    plt.ylabel('Percentage of unique objects [%]')
+    plt.ylabel('Percentage of unique objects [\\%]')
     plt.legend(legends, loc='upper left')
 
     plt.xscale('log', basex=10)

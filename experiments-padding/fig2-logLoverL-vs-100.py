@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 from colors import *
 from padme import *
 import matplotlib
+import utils as utils
 
-matplotlib.rcParams.update({'font.size': font_size})
+utils.prepare_for_latex()
 
 xVals = []
 yValsPadme = []
@@ -59,7 +60,7 @@ while i < len(yValsNextPowOf2):
 
 #plot data
 
-plt.plot(xValsNextPowOf2Max, yValsNextPowOf2Max, color=nextpow2_color, linestyle=nextpow2_style, linewidth=curve_width, label='Next power of 2 - O(100%)')
+plt.plot(xValsNextPowOf2Max, yValsNextPowOf2Max, color=nextpow2_color, linestyle=nextpow2_style, linewidth=curve_width, label='Next power of 2 - O(100\\%)')
 plt.plot(xVals, yValsPadme, color=padme_color, linestyle=padme_style, linewidth=curve_width, label='Padmé overhead estimate - 1/(2*log L)')
 #plt.plot(xVals, yValsPadmeEstimation, color=padme2_color, linestyle=padme2_style, linewidth=curve_width, label='Padmé approx - 1/sqrt(L)')
 plt.legend(loc='center right')
@@ -68,7 +69,7 @@ plt.xscale('log')
 #plt.yscale('log')
 
 plt.xlabel('L [b]')
-plt.ylabel('Overhead [%]')
+plt.ylabel('Overhead [\\%]')
 
 plt.grid(color=grid_color, linestyle=grid_style, linewidth=grid_width)
 plt.title('')
