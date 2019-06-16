@@ -10,8 +10,7 @@ import glob
 from colors import *
 from padme import *
 import matplotlib
-
-matplotlib.rcParams.update({'font.size': font_size})
+import utils as utils
 
 def computeDensity(data):
     histogram = {}
@@ -26,6 +25,7 @@ def computeDensity(data):
 # create the plot "fig4-i-$DATASET-anonymity-cdf.eps"
 def createFigDatasetAnonymityCDF(i, input_file):
     plt.figure(i)
+    utils.prepare_for_latex()
     Ls = []             # the raw L's values
     Bs = []
 

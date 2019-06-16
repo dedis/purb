@@ -10,8 +10,9 @@ import glob
 from colors import *
 from padme import *
 import matplotlib
+import utils as utils
 
-matplotlib.rcParams.update({'font.size': font_size})
+utils.prepare_for_latex()
 
 def parseFile(file):
     Ls = []
@@ -33,7 +34,7 @@ for d in datasets:
     data = datasets[d]
     p = 100. * np.arange(len(data)) / (len(data) - 1)
 
-    prettyName = d.replace('./', '').replace('.sizes', '')
+    prettyName = d.replace('./', '').replace('.sizes', '').replace('_', '\\_')
     plt.plot(data, p, color=datasets_color[prettyName], linestyle=datasets_style[prettyName], linewidth=curve_width)
     legends.append(prettyName)
 

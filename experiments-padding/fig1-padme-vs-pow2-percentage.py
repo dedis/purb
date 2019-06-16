@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 from colors import *
 from padme import *
 import matplotlib
+import utils as utils
 
-matplotlib.rcParams.update({'font.size': font_size})
+utils.prepare_for_latex()
 
 def getNextPowerOfTwo(x):
     exp = math.ceil(math.log(x,2))
@@ -46,7 +47,7 @@ plt.xlim([1000, end])
 
 plt.title('')
 plt.xlabel('original size L [b]')
-plt.ylabel('padding overhead [%]')
+plt.ylabel('padding overhead [\\%]')
 
 plt.tight_layout()
 plt.savefig('fig1-padme-vs-pow2-percentage.eps')
