@@ -11,22 +11,17 @@ import (
 )
 
 const REPEAT = 20
-const PAYLOAD_SIZE = 1024
 const RECIPIENTS_HEADER_STR = "1,10,100" //100,1000,10000"
 const RECIPIENTS_ENCODING_STR = "1,3,10,100" //100,1000,10000"
-const RECIPIENTS_DECODING_STR = "1,10,100,1000" //,10000"
+const RECIPIENTS_DECODING_STR = "1,10,100,1000,10000"
 const SUITES_ENCODING_STR = "1,3,10"
+const SUITES_DECODING_STR = "1"
 
 func main() {
 	app := cli.NewApp()
 	app.Name = "purbs simul"
 	app.Version = "0.1"
 	app.Commands = []cli.Command{
-		{
-			Name:    "encode",
-			Aliases: []string{"e"},
-			Action:  encoding,
-		},
 		{
 			Name:    "decode",
 			Aliases: []string{"d"},
@@ -38,9 +33,9 @@ func main() {
 			Action:  headerSize,
 		},
 		{
-			Name: "encode-precise",
-			Aliases: []string{"p"},
-			Action: encodingPrecise,
+			Name: "encode",
+			Aliases: []string{"e"},
+			Action: encoding,
 		},
 		{
 			Name: "compactness",
@@ -51,6 +46,18 @@ func main() {
 	app.Run(os.Args)
 }
 
+func decoding(c *cli.Context) {
+	l := log.New(os.Stderr, "", 0)
+
+	recipients := toIntArray(RECIPIENTS_DECODING_STR)
+	suites := toIntArray(SUITES_DECODING_STR)
+
+	l.Println("-------------------------------------------------------")
+	l.Println("Computing decoding time for various number of recipients/suites")
+	out := purbs.SimulMeasureWorstDecodingTime(REPEAT, recipients, suites)
+	fmt.Println(out)
+}
+
 func encoding(c *cli.Context) {
 	l := log.New(os.Stderr, "", 0)
 
@@ -58,20 +65,8 @@ func encoding(c *cli.Context) {
 	suites := toIntArray(SUITES_ENCODING_STR)
 
 	l.Println("-------------------------------------------------------")
-	l.Println("Computing Encoding times for various number of recipients/suites")
-	out := purbs.SimulMeasureEncodingTime(REPEAT, recipients, suites)
-	fmt.Println(out)
-}
-
-func encodingPrecise(c *cli.Context) {
-	l := log.New(os.Stderr, "", 0)
-
-	recipients := toIntArray(RECIPIENTS_ENCODING_STR)
-	suites := toIntArray(SUITES_ENCODING_STR)
-
-	l.Println("-------------------------------------------------------")
 	l.Println("Computing Precise Encoding times for various number of recipients/suites")
-	out := purbs.SimulMeasureEncodingTimePrecise(REPEAT, recipients, suites)
+	out := purbs.SimulMeasureEncodingTime(REPEAT, recipients, suites)
 	fmt.Println(out)
 }
 
@@ -96,17 +91,6 @@ func headerCompactness(c *cli.Context){
 	l.Println("-------------------------------------------------------")
 	l.Println("Computing Header compactness for various number of recipients/suites")
 	out := purbs.SimulMeasureHeaderCompactness(REPEAT, recipients, suites)
-	fmt.Println(out)
-}
-
-func decoding(c *cli.Context) {
-	l := log.New(os.Stderr, "", 0)
-
-	recipients := toIntArray(RECIPIENTS_DECODING_STR)
-
-	l.Println("-------------------------------------------------------")
-	l.Println("Computing Decoding time for various number of recipients")
-	out := purbs.SimulDecode(REPEAT, PAYLOAD_SIZE, recipients)
 	fmt.Println(out)
 }
 

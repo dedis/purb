@@ -95,7 +95,7 @@ def plotDecodeTime():
     for decode_type in decode:
         data = decode[decode_type]
 
-        v = groupByKeyAndGetStats(data, key="totalNRecipients")
+        v = groupByKeyAndGetStats(data, key="nRecipients")
 
         Xs = [x for x in v]
         Ys = [v[x]['mean2'] for x in v]
@@ -121,49 +121,10 @@ def plotDecodeTime():
     plt.text(Xs[0] + 0.1, 0.25, 'Assembly-', fontsize=16, rotation='vertical', color='black')
     plt.text(Xs[0] + 0.55, 0.2, 'optimization', fontsize=16, rotation='vertical', color='black')
     plt.show()
-    # plt.savefig('decode.eps', format='eps', dpi=300)
 
-def plotEncodingTime():
+
+def plotEncodeTime():
     encode = readAndProcessTwoLevels('encode.json')
-
-    labels = {}
-    labels['pgp'] = 'PGP'
-    labels['pgp-hidden'] = 'PGP Hidden'
-    labels['purb-flat'] = 'PURBs (no GHT)'
-    labels['purb'] = 'PURBs'
-
-    i = 0
-    for encode_type in encode:
-        data = encode[encode_type]
-
-        # take only the data for 3 suites
-        data_filtered = []
-        for row in data:
-            if row['nSuites'] == 3:
-                data_filtered.append(row)
-
-        v = groupByKeyAndGetStats(data_filtered, key="nRecipients")
-        
-        Xs = [x for x in v]
-        Ys = [v[x]['mean2'] for x in v]
-        Yerr = [v[x]['err2'] for x in v]
-        plt.errorbar(Xs, Ys, yerr=Yerr, color=colors[i], label=labels[encode_type], marker=markers[i], linestyle=linestyles[i],capsize=2)
-        i += 1
-
-    plt.tick_params(axis='x', labelsize=16)
-    plt.tick_params(axis='y', labelsize=16)
-
-    plt.legend()
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.ylabel('CPU time [ms]')
-    plt.xlabel('Number of Recipients')
-    plt.grid(True, which="major", axis='both')
-    plt.axis()
-    plt.show()
-
-def plotEncodingPrecise():
-    encode = readAndProcessTwoLevels('encode_precise.json')
 
     all = ['mac', 'header-encrypt', 'payload', 'asym-crypto', 'shared-secrets']
     
@@ -299,12 +260,6 @@ def plotEncodingPrecise():
         i += 1
     ticks_positions = [x + 1 for x in ticks_positions]
 
-    plt.xticks(ticks_positions, ticks)
-    plt.ylabel('CPU time [ms]')
-    plt.xlabel('Number of Recipients')
-    plt.yscale('log')
-    plt.grid(True, which="major", axis='y')
-
     tendency_xpos = list(set(tendency_xpos))
     tendency_ypos = []
     for key_int in sorted([int(x) for x in tendency_ypos_dict]):
@@ -323,11 +278,6 @@ def plotEncodingPrecise():
             del(tendency_ypos[i])
         i -= 1
 
-    trend_marker = 'x'
-    trend_color = '#3aff28'
-    trend_label = 'Total time'
-    plt.plot(tendency_xpos, tendency_ypos, color=trend_color, marker=trend_marker, label=trend_label)
-
     legends = []
     i = 0
     for encode_type in order:
@@ -335,6 +285,10 @@ def plotEncodingPrecise():
         legends.append(data_serie)
         i += 1
 
+    trend_marker = 'x'
+    trend_color = '#ffb39a'
+    trend_label = 'Total time'
+    plt.plot(tendency_xpos, tendency_ypos, color=trend_color, marker=trend_marker, label=trend_label)
     legends.append(Line2D([0], [0], color=trend_color, marker=trend_marker, label=trend_label))
 
     i = 0
@@ -346,21 +300,27 @@ def plotEncodingPrecise():
         legends.append(data_serie)
         i += 1
 
-    plt.legend(handles=legends, loc='center left', bbox_to_anchor=(0, 0.3), ncol=2, labelspacing=0.2, columnspacing=1)
+    plt.xticks(ticks_positions, ticks)
+    plt.ylabel('CPU time [ms]')
+    plt.xlabel('Number of Recipients')
+    plt.yscale('log')
+    axes = plt.gca()
+    axes.set_ylim([0.01, 10000])
+    plt.axis()
+    plt.grid(True, which="major", axis='y')
+    plt.legend(handles=legends, loc='upper left', ncol=2, labelspacing=0.2, columnspacing=1)
 
     plt.show()
 
 if len(sys.argv) == 1:
-    print("Usage: ./plot.py e|d|h|c|p, for Encode,Decode,HeaderSize,Compactness,encode Precise(stacked bars)")
+    print("Usage: ./plot.py d|h|c|e, for Decode,HeaderSize,Compactness,Encode (stacked bars)")
 else:
     prepare_for_latex()
-    if sys.argv[1] == 'e':
-        plotEncodingTime()
     if sys.argv[1] == 'h':
         plotHeaderSize()
     if sys.argv[1] == 'd':
         plotDecodeTime()
-    if sys.argv[1] == 'p':
-        plotEncodingPrecise()
+    if sys.argv[1] == 'e':
+        plotEncodeTime()
     if sys.argv[1] == 'c':
         plotHeaderCompactness()

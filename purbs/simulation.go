@@ -19,12 +19,12 @@ import (
 // Fixed for the simulation: 16-byte symmetric key + 4-byte offset position + 16-byte authentication tag
 const ENTRYPOINT_LENGTH = 16 + 4 + 16
 
-const MESSAGE_SIZE = 1024 * 10 // 10 KB
+const MESSAGE_SIZE = 1024 // 1 KB
 const simulationIsVerbose = false
 const simulationUsesSimplifiedLayout = false
 
-// SimulMeasureEncodingTimePrecise
-func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int) string {
+// SimulMeasureEncodingTime
+func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) string {
 	l := log.New(os.Stderr, "", 0)
 
 	resultsPKGen := new(Results)
@@ -121,7 +121,7 @@ func SimulMeasureEncodingTimePrecise(nRepeat int, recipients []int, suites []int
 }
 
 // SimulMeasureNumRecipients
-func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) string {
+func SimulMeasureWorstDecodingTime(nRepeat int, recipients []int, suites []int) string {
 	l := log.New(os.Stderr, "", 0)
 
 	msg := simulGetRandomBytes(MESSAGE_SIZE)
@@ -141,14 +141,14 @@ func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) strin
 				for i := 0; i < nRecipients; i++ {
 					recipients = append(recipients, pgp.NewPGP())
 				}
-				m.reset()
 				enc, err := pgp.Encrypt(msg, recipients, false)
-				resultsPGP.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.record())
 				if err != nil {
 					log.Fatal(err)
 				}
-				// sanity check
-				dec, err := recipients[0].Decrypt(enc)
+
+				m.reset()
+				dec, err := recipients[len(recipients)-1].Decrypt(enc)
+				resultsPGP.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.record())
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -157,14 +157,13 @@ func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) strin
 				}
 
 				//---------------- PGP hidden -------------------
-				m.reset()
 				enc, err = pgp.Encrypt(msg, recipients, true)
-				resultsPGPHidden.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.record())
 				if err != nil {
 					log.Fatal(err)
 				}
-				// sanity check
-				dec, err = recipients[0].Decrypt(enc)
+				m.reset()
+				dec, err = recipients[len(recipients)-1].Decrypt(enc)
+				resultsPGPHidden.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.record())
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -177,15 +176,15 @@ func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) strin
 				decs := createMultiDecoders(nRecipients, nSuites, si)
 				publicFixedParams := NewPublicFixedParameters(si, true)
 
-				m.reset()
 				purb, err := Encode(msg, decs, random.New(), publicFixedParams, simulationIsVerbose)
 				blob := purb.ToBytes()
-				resultsPURBFlat.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.record())
 				if err != nil {
 					panic(err.Error())
 				}
-				// sanity check
-				success, out, err := Decode(blob, &decs[0], publicFixedParams, simulationIsVerbose)
+
+				m.reset()
+				success, out, err := Decode(blob, &decs[len(decs)-1], publicFixedParams, simulationIsVerbose)
+				resultsPURBFlat.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.record())
 				if !success || !bytes.Equal(out, msg) {
 					panic("PURBs-Flat did not decrypt correctly")
 				}
@@ -198,15 +197,16 @@ func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) strin
 				decs = createMultiDecoders(nRecipients, nSuites, si)
 				publicFixedParams = NewPublicFixedParameters(si, false)
 
-				m.reset()
+
 				purb, err = Encode(msg, decs, random.New(), publicFixedParams, simulationIsVerbose)
 				blob = purb.ToBytes()
 				if err != nil {
 					panic(err.Error())
 				}
-				resultsPURB.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.record())
 
-				success, out, err = Decode(blob, &decs[0], publicFixedParams, simulationIsVerbose)
+				m.reset()
+				success, out, err = Decode(blob, &decs[len(decs)-1], publicFixedParams, simulationIsVerbose)
+				resultsPURB.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.record())
 				if !success || !bytes.Equal(out, msg) {
 					panic("PURBs did not decrypt correctly")
 				}
@@ -288,138 +288,6 @@ func SimulMeasureHeaderSize(nRepeat int, numRecipients []int) string {
 	s := "{"
 	s += "\"purb\": " + resultsPURBs.String() + ","
 	s += "\"purb-flat\": " + resultsFlat.String()
-	s += "}"
-	return s
-}
-
-// SimulDecode
-func SimulDecode(nRepeat int, payloadLength int, nRecipients []int) string {
-	l := log.New(os.Stderr, "", 0)
-
-	msg := simulGetRandomBytes(MESSAGE_SIZE)
-
-	resultsPGP := new(Results)
-	resultsPGPHidden := new(Results)
-	resultsPURBFlat := new(Results)
-	resultsPURB := new(Results)
-
-	nSuites := 1
-
-	m := newMonitor()
-	for _, nRecipients := range nRecipients {
-		for k := 0; k < nRepeat; k++ {
-			l.Println("Simulating for", nRecipients, "recipients,", nSuites, "suites,", k, "/", nRepeat)
-
-			step := int(math.Floor(float64(nRecipients) / 10))
-			if step < 1 {
-				step = 1
-			}
-
-			//------------------- PGP -------------------
-			recipients := make([]*pgp.PGP, 0)
-			for i := 0; i < nRecipients; i++ {
-				recipients = append(recipients, pgp.NewPGP())
-			}
-			enc, err := pgp.Encrypt(msg, recipients, false)
-			if err != nil {
-				log.Fatal(err)
-			}
-			// sanity check
-			for i := 0; i < len(recipients); i += step {
-				m.reset()
-				dec, err := recipients[i].Decrypt(enc)
-				resultsPGP.add(i, nSuites, k, nRecipients, -1, nRepeat, m.record())
-				if err != nil {
-					log.Fatal(err)
-				}
-				if !bytes.Equal(dec, msg) {
-					panic("PGP did not decrypt correctly")
-				}
-				if i%1 == 0 {
-					l.Println("PGP Decrypting", i, "/", len(recipients))
-				}
-			}
-
-			//---------------- PGP hidden -------------------
-			enc, err = pgp.Encrypt(msg, recipients, true)
-			if err != nil {
-				log.Fatal(err)
-			}
-			// sanity check
-			for i := 0; i < len(recipients); i += step {
-				m.reset()
-				dec, err := recipients[i].Decrypt(enc)
-				resultsPGPHidden.add(i, nSuites, k, nRecipients, -1, nRepeat, m.record())
-				if err != nil {
-					log.Fatal(err)
-				}
-				if !bytes.Equal(dec, msg) {
-					panic("PGP-Hidden did not decrypt correctly")
-				}
-				if i%1 == 0 {
-					l.Println("PGP-Hidden Decrypting", i, "/", len(recipients))
-				}
-			}
-
-			// ----------- PURBs simplified ---------------
-			si := createMultiInfo(nSuites)
-			decs := createMultiDecoders(nRecipients, nSuites, si)
-			publicFixedParams := NewPublicFixedParameters(si, true)
-
-			purb, err := Encode(msg, decs, random.New(), publicFixedParams, simulationIsVerbose)
-			blob := purb.ToBytes()
-			if err != nil {
-				panic(err.Error())
-			}
-			// sanity check
-			for i := 0; i < len(recipients); i += step {
-				m.reset()
-				success, out, err := Decode(blob, &decs[i], publicFixedParams, simulationIsVerbose)
-				resultsPURBFlat.add(i, nSuites, k, nRecipients, -1, nRepeat, m.record())
-				if !success || !bytes.Equal(out, msg) {
-					panic("PURBs-Flat did not decrypt correctly")
-				}
-				if err != nil {
-					panic(err.Error())
-				}
-				if i%1 == 0 {
-					l.Println("PURB-Flat Decrypting", i, "/", len(recipients))
-				}
-			}
-
-			// ----------------- PURBs --------------------
-			si = createMultiInfo(nSuites)
-			decs = createMultiDecoders(nRecipients, nSuites, si)
-			publicFixedParams = NewPublicFixedParameters(si, false)
-
-			purb, err = Encode(msg, decs, random.New(), publicFixedParams, simulationIsVerbose)
-			blob = purb.ToBytes()
-			if err != nil {
-				panic(err.Error())
-			}
-
-			for i := 0; i < len(recipients); i += step {
-				m.reset()
-				success, out, err := Decode(blob, &decs[i], publicFixedParams, simulationIsVerbose)
-				resultsPURB.add(i, nSuites, k, nRecipients, -1, nRepeat, m.record())
-				if !success || !bytes.Equal(out, msg) {
-					panic("PURBs did not decrypt correctly")
-				}
-				if err != nil {
-					panic(err.Error())
-				}
-				if i%1 == 0 {
-					l.Println("PURB Decrypting", i, "/", len(recipients))
-				}
-			}
-		}
-	}
-
-	s := "{"
-	s += "\"pgp\": " + resultsPGP.String() + ","
-	s += "\"pgp-hidden\": " + resultsPGPHidden.String() + ","
-	s += "\"purb-flat\": " + resultsPURBFlat.String() + ","
-	s += "\"purb\": " + resultsPURB.String()
 	s += "}"
 	return s
 }
