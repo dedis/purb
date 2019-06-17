@@ -137,6 +137,6 @@ def median_and_deviation(elems):
     outlier = max(devs, key=lambda k: k[1])
     a = np.delete(a, outlier[0])
     dev = a.std()
-    mean = a.mean()
+    # mean = a.mean()
     median = np.median(a)
     return median, dev

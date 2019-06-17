@@ -8,7 +8,7 @@ from utils import *
 
 # colors and constants
 colors = ['#E2DC27', '#071784', '#077C0F', '#BC220A']
-devcolors = ['#FFFDCD', '#CDE1FF', '#FFDFD1', '#D4FFE3']
+devcolors = ['#FFFDCD', '#CDE1FF', '#D4FFE3', '#FFDFD1']
 # barcolors = ['#c2c0bf', '#FFFDCD', '#CDE1FF', '#FFDFD1', '#D4FFE3']
 barcolors = ['#EBEBEB', '#FFE5CC', '#CCE5FF', ]
 markers = ['d', 's', 'x', '.']
@@ -117,9 +117,9 @@ def plotDecodeTime():
     plt.yscale('log')
     plt.xlim(0.8, 13000)
     # Gap explaining line
-    plt.annotate("", xy=(Xs[0], 0.1), xytext=(Xs[0], 6), arrowprops=dict(arrowstyle='<|-|>', linestyle='--', color='black'))
-    plt.text(Xs[0] + 0.1, 0.25, 'Assembly-', fontsize=16, rotation='vertical', color='black')
-    plt.text(Xs[0] + 0.55, 0.2, 'optimization', fontsize=16, rotation='vertical', color='black')
+    plt.annotate("", xy=(Xs[0], 0.08), xytext=(Xs[0], 5), arrowprops=dict(arrowstyle='<|-|>', linestyle='--', color='black'))
+    plt.text(Xs[0] + 0.1, 0.2, 'Assembly-', fontsize=16, rotation='vertical', color='black')
+    plt.text(Xs[0] + 0.55, 0.15, 'optimization', fontsize=16, rotation='vertical', color='black')
     plt.show()
 
 
