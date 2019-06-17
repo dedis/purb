@@ -7,9 +7,9 @@ import (
 	"math"
 	"syscall"
 
-	"github.com/dedis/kyber/group/curve25519"
-	"github.com/dedis/kyber/util/key"
-	"github.com/dedis/kyber/util/random"
+	"gopkg.in/dedis/kyber.v2/group/curve25519"
+	"gopkg.in/dedis/kyber.v2/util/key"
+	"gopkg.in/dedis/kyber.v2/util/random"
 	"github.com/dedis/purbs/experiments-encoding/pgp"
 	"math/rand"
 	"os"

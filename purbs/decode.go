@@ -6,8 +6,8 @@ import (
 	"encoding/binary"
 	"errors"
 
-	"github.com/dedis/kyber"
-	"github.com/dedis/onet/log"
+	kyber "gopkg.in/dedis/kyber.v2"
+	log "gopkg.in/dedis/onet.v2/log"
 )
 
 // Decode takes a PURB blob and a recipient info (suite+KeyPair) and extracts the payload
