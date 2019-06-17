@@ -1,11 +1,11 @@
 package purbs
 
 import (
+	"github.com/stretchr/testify/require"
 	"gopkg.in/dedis/kyber.v2/group/curve25519"
 	"gopkg.in/dedis/kyber.v2/util/key"
 	"gopkg.in/dedis/kyber.v2/util/random"
 	"gopkg.in/dedis/onet.v2/log"
-	"github.com/stretchr/testify/require"
 	"math"
 	"testing"
 )

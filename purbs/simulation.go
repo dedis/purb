@@ -7,10 +7,10 @@ import (
 	"math"
 	"syscall"
 
+	"github.com/dedis/purbs/experiments-encoding/pgp"
 	"gopkg.in/dedis/kyber.v2/group/curve25519"
 	"gopkg.in/dedis/kyber.v2/util/key"
 	"gopkg.in/dedis/kyber.v2/util/random"
-	"github.com/dedis/purbs/experiments-encoding/pgp"
 	"math/rand"
 	"os"
 	"time"
@@ -19,7 +19,7 @@ import (
 // Fixed for the simulation: 16-byte symmetric key + 4-byte offset position + 16-byte authentication tag
 const ENTRYPOINT_LENGTH = 16 + 4 + 16
 
-const MESSAGE_SIZE = 1024 // 1 KB
+const message_size = 1024 // 1 KB
 const simulationIsVerbose = false
 const simulationUsesSimplifiedLayout = false
 
@@ -39,7 +39,7 @@ func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) strin
 		for _, nRecipients := range recipients {
 			for k := 0; k < nRepeat; k++ {
 
-				msg := simulGetRandomBytes(MESSAGE_SIZE)
+				msg := simulGetRandomBytes(message_size)
 
 				l.Println("Simulating for", nRecipients, "recipients,", nSuites, "suites,", k, "/", nRepeat)
 
@@ -124,7 +124,7 @@ func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) strin
 func SimulMeasureWorstDecodingTime(nRepeat int, recipients []int, suites []int) string {
 	l := log.New(os.Stderr, "", 0)
 
-	msg := simulGetRandomBytes(MESSAGE_SIZE)
+	msg := simulGetRandomBytes(message_size)
 
 	resultsPGP := new(Results)
 	resultsPGPHidden := new(Results)
@@ -196,7 +196,6 @@ func SimulMeasureWorstDecodingTime(nRepeat int, recipients []int, suites []int) 
 				si = createMultiInfo(nSuites)
 				decs = createMultiDecoders(nRecipients, nSuites, si)
 				publicFixedParams = NewPublicFixedParameters(si, false)
-
 
 				purb, err = Encode(msg, decs, random.New(), publicFixedParams, simulationIsVerbose)
 				blob = purb.ToBytes()

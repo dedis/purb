@@ -1,13 +1,14 @@
 package main
 
 import (
+	"fmt"
+	"log"
+	"os"
+	"strconv"
+	"strings"
+
 	"github.com/dedis/purbs/purbs"
 	"gopkg.in/urfave/cli.v1"
-	"fmt"
-	"os"
-	"log"
-	"strings"
-	"strconv"
 )
 
 const REPEAT = 20
