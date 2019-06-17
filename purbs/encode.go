@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/dedis/kyber/util/key"
-	"github.com/dedis/kyber/util/random"
-	"github.com/dedis/onet/log"
+	"gopkg.in/dedis/kyber.v2/util/key"
+	"gopkg.in/dedis/kyber.v2/util/random"
+	"gopkg.in/dedis/onet.v2/log"
 )
 
 // Creates a struct with parameters that are *fixed* across all PURBs. Should be constants, but here it is a variable for simulating various parameters

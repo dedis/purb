@@ -2,8 +2,9 @@ package purbs
 
 import (
 	"crypto/cipher"
-	"github.com/dedis/kyber"
-	"github.com/dedis/kyber/util/key"
+
+	kyber "gopkg.in/dedis/kyber.v2"
+	"gopkg.in/dedis/kyber.v2/util/key"
 )
 
 // Length (in bytes) of the symmetric key used to encrypt the payload

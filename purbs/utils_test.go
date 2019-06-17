@@ -1,8 +1,8 @@
 package purbs
 
 import (
-	"github.com/dedis/onet/log"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/dedis/onet.v2/log"
 	"testing"
 )
 
