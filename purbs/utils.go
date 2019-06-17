@@ -74,6 +74,8 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 	}
 	lines = append(lines, fmt.Sprintf("Padded Payload: %+v @ offset %v (len %v)", purb.Payload, purb.Header.Length(), len(purb.Payload)))
 
+	lines = append(lines, fmt.Sprintf("MAC: %+v @ offset %v (len %v)", getMAC(purb.byteRepresentation), len(purb.byteRepresentation)-MAC_AUTHENTICATION_TAG_LENGTH, MAC_AUTHENTICATION_TAG_LENGTH))
+
 	if !withBoundaries {
 		return strings.Join(lines, "\n")
 	}
