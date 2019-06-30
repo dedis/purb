@@ -46,7 +46,7 @@ plt.xscale('log')
 plt.xlim([1000, end])
 
 plt.title('')
-plt.xlabel('original size L [b]')
+plt.xlabel('original size L [B]')
 plt.ylabel('padding overhead [\\%]')
 
 plt.tight_layout()
