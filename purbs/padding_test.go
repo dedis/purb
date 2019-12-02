@@ -1,8 +1,9 @@
 package purbs
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestPad(t *testing.T) {
@@ -23,5 +24,10 @@ func TestUnPad(t *testing.T) {
 	msgPadded = append(msgPadded, make([]byte, 4)...)
 	result := unPad(msgPadded)
 	require.Equal(t, msg, result)
-	//fmt.Printf("Result: %s\n", result)
+}
+
+func TestBitsToZero(t *testing.T) {
+	require.Equal(t, 1, int(zeroBitsNeeded(8)))
+	require.Equal(t, 1, int(zeroBitsNeeded(9)))
+	require.Equal(t, 1, int(zeroBitsNeeded(10)))
 }

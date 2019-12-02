@@ -554,7 +554,7 @@ func (purb *Purb) addMAC() {
 }
 
 func getMAC(blob []byte) []byte {
-	return blob[len(blob) - MAC_AUTHENTICATION_TAG_LENGTH : ]
+	return blob[len(blob)-MAC_AUTHENTICATION_TAG_LENGTH:]
 }
 
 // ToBytes get the []byte representation of the PURB
