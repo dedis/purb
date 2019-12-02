@@ -3,7 +3,7 @@ python_scripts=$(shell ls *.py)
 py:
 	for f in $(python_scripts) ; do \
 		echo "Running ./$$f"; \
-        ./$$f ; \
+        python3 ./$$f ; \
     done
 
 .PHONY: clean

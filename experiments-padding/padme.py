@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/usr/bin/python3
 
 import math
 from math import floor 
@@ -8,7 +8,7 @@ def log(x):
 
 def getPadme(L):
     L = int(L)
-    U = int(floor(log(L))+1)
+    U = int(floor(log(L)))
     V = int(floor(log(U))+1)
     lastBits = U-V
 

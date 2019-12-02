@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/usr/bin/python3
 
 font_size = 13
 curve_width = 2.0
