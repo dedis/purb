@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dedis/purbs/purbs"
+	"github.com/dedis/purb/purbs"
 	"gopkg.in/urfave/cli.v1"
 )
 

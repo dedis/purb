@@ -7,7 +7,7 @@ import (
 	"math"
 	"syscall"
 
-	"github.com/dedis/purbs/experiments-encoding/pgp"
+	"github.com/dedis/purb/experiments-encoding/pgp"
 	"gopkg.in/dedis/kyber.v2/group/curve25519"
 	"gopkg.in/dedis/kyber.v2/util/key"
 	"gopkg.in/dedis/kyber.v2/util/random"

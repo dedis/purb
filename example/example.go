@@ -6,7 +6,7 @@ import (
 	"gopkg.in/dedis/kyber.v2/group/curve25519"
 	"gopkg.in/dedis/kyber.v2/util/key"
 	"gopkg.in/dedis/kyber.v2/util/random"
-	"github.com/dedis/purbs/purbs"
+	"github.com/dedis/purb/purbs"
 )
 
 func main() {
