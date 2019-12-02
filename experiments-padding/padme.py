@@ -1,15 +1,15 @@
 #!/bin/python3
 
 import math
-from math import ceil
+from math import floor 
 
 def log(x):
     return math.log(x, 2)
 
 def getPadme(L):
     L = int(L)
-    U = int(ceil(log(L))+1)
-    V = int(ceil(log(U))+1)
+    U = int(floor(log(L))+1)
+    V = int(floor(log(U))+1)
     lastBits = U-V
 
     bitMask = (2 ** lastBits - 1)
