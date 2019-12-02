@@ -25,15 +25,9 @@ func pad(msg []byte, other int) []byte {
 	// STARTPADBYTE must be always present so we append it first and then compute
 	// amount of zero padding needed
 	msg = append(msg, STARTPADBYTE)
-	msgLen := 8 * (uint64(len(msg) + other)) // Length in bits
+	msgLen := uint64(len(msg) + other) // Length in bytes
 	padLen := paddingLength(msgLen)
-	// Convert padding length to the number of bytes needed
-	if padLen < 8 && padLen != 0 {
-		padLen = 1
-	} else {
-		padLen = int(math.Ceil(float64(padLen) / 8))
-	}
-	// Padding the message with zeros
+	// Padding the message with zero bytes
 	pad := make([]byte, padLen)
 	paddedMsg = append(msg, pad...)
 	return paddedMsg
@@ -48,18 +42,18 @@ func unPad(msg []byte) []byte {
 // Computes amount of padding needed
 func paddingLength(msgLen uint64) int {
 	var mask, paddingNeeded uint64
-	zeroBits := zeroBitsNeeded(msgLen)
+	zeroBytes := zeroBytesNeeded(msgLen)
 	//Generate a mask that we use to isolate the zeroBits bits of the length (e.g., 11111)
-	mask = (1 << zeroBits) - 1
-	paddingNeeded = 1 << zeroBits
+	mask = (1 << zeroBytes) - 1
 	// How much we need to pad to obtain the required number of zero bits at the end
+	paddingNeeded = 1 << zeroBytes
 	paddingNeeded = paddingNeeded - (msgLen & mask)
 	return int(paddingNeeded)
 }
 
-// Returns number of bits at the end that are required to be zero in the binary
+// Returns number of bytes at the end that are required to be zero in the binary
 // representation of message length l.
-func zeroBitsNeeded(l uint64) uint64 {
+func zeroBytesNeeded(l uint64) uint64 {
 	E := math.Floor(math.Log2(float64(l)))
 	S := math.Floor(math.Log2(E)) + 1
 	return uint64(E - S)

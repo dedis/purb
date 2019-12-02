@@ -7,15 +7,13 @@ import (
 )
 
 func TestPad(t *testing.T) {
-	msg := []byte("this is a long message that is supposed to be padded by 0x80 and 3 zero bytes")
+	msg := []byte("this is a long message that is supposed to be padded by 0x80 and 3 zero bytes") // 77 bytes
 	result := pad(msg, 0)
-	//fmt.Println("Unpaded bit length ", 8*len(msg))
-	//fmt.Printf("Padded bit length %d \nArray is %v\n", 8*len(result), result)
-	require.Equal(t, 640, 8*len(result))
-
+	require.Equal(t, 80, len(result))
 	// Now we add an overhead of 7 bytes representing the header
-	result = pad(msg, 7)
-	require.Equal(t, 704, 8*(len(result)+7))
+	headerLen := 7
+	result = pad(msg, headerLen)
+	require.Equal(t, 88, len(result)+headerLen)
 }
 
 func TestUnPad(t *testing.T) {
@@ -27,7 +25,7 @@ func TestUnPad(t *testing.T) {
 }
 
 func TestBitsToZero(t *testing.T) {
-	require.Equal(t, 1, int(zeroBitsNeeded(8)))
-	require.Equal(t, 1, int(zeroBitsNeeded(9)))
-	require.Equal(t, 1, int(zeroBitsNeeded(10)))
+	require.Equal(t, 1, int(zeroBytesNeeded(8)))
+	require.Equal(t, 1, int(zeroBytesNeeded(9)))
+	require.Equal(t, 1, int(zeroBytesNeeded(10)))
 }
