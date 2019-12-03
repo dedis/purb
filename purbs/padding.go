@@ -41,13 +41,13 @@ func unPad(msg []byte) []byte {
 
 // Computes amount of padding needed
 func paddingLength(msgLen uint64) int {
-	var mask, paddingNeeded uint64
+	var mask, paddingNeeded, paddedMsgLen uint64
 	zeroBytes := zeroBytesNeeded(msgLen)
 	//Generate a mask that we use to isolate the zeroBits bits of the length (e.g., 11111)
 	mask = (1 << zeroBytes) - 1
 	// How much we need to pad to obtain the required number of zero bits at the end
-	paddingNeeded = 1 << zeroBytes
-	paddingNeeded = paddingNeeded - (msgLen & mask)
+	paddedMsgLen = (msgLen + mask) & ^mask
+	paddingNeeded = paddedMsgLen - msgLen
 	return int(paddingNeeded)
 }
 

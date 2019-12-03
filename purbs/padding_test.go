@@ -1,9 +1,8 @@
 package purbs
 
 import (
-	"testing"
-
 	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 func TestPad(t *testing.T) {
