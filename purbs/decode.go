@@ -187,25 +187,24 @@ func verifyMAC(entrypoint []byte, blob []byte) bool {
 }
 
 func payloadDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {
-	// verify pointer to payload
-	pointerPos := len(entrypoint) - OFFSET_POINTER_LEN
-	pointerBytes := entrypoint[pointerPos : pointerPos+OFFSET_POINTER_LEN]
-	pointer := int(binary.BigEndian.Uint32(pointerBytes))
-	if pointer > len(fullPURBBlob) {
+	// verify pointers to payload
+	startPointerPos := len(entrypoint) - START_OFFSET_LEN - END_OFFSET_LEN
+	startPointerBytes := entrypoint[startPointerPos : startPointerPos+START_OFFSET_LEN]
+	startPointer := int(binary.BigEndian.Uint32(startPointerBytes))
+	endPointerPos := len(entrypoint) - END_OFFSET_LEN
+	endPointerBytes := entrypoint[endPointerPos : endPointerPos+END_OFFSET_LEN]
+	endPointer := int(binary.BigEndian.Uint32(endPointerBytes))
+	if startPointer > len(fullPURBBlob) || endPointer > len(fullPURBBlob) {
 		// the pointer is pointing outside the blob
-		return false, "entrypoint pointer is invalid", nil
+		return false, "either payload start or end pointer is invalid", nil
 	}
 
 	// compute SessionKey from entrypoint, create the decoder
-	sessionKey := entrypoint[0:pointerPos]
-	payload := fullPURBBlob[pointer:]
+	sessionKey := entrypoint[0:startPointerPos]
+	payload := unPad(fullPURBBlob[startPointer:], endPointer-startPointer)
 
 	key := KDF("enc", sessionKey)
 	msg := streamDecrypt(payload, key)
-
-	if len(msg) != 0 {
-		msg = unPad(msg)
-	}
 
 	return true, "", msg
 }

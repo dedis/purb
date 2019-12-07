@@ -6,20 +6,20 @@ import (
 )
 
 func TestPad(t *testing.T) {
-	msg := []byte("this is a long message that is supposed to be padded by 0x80 and 3 zero bytes") // 77 bytes
+	msg := []byte("this is a message that is supposed to be padded with 5 random bytes") // 67 bytes
 	result := pad(msg, 0)
-	require.Equal(t, 80, len(result))
+	require.Equal(t, 72, len(result))
 	// Now we add an overhead of 7 bytes representing the header
 	headerLen := 7
 	result = pad(msg, headerLen)
-	require.Equal(t, 88, len(result)+headerLen)
+	require.Equal(t, 80, len(result)+headerLen)
 }
 
 func TestUnPad(t *testing.T) {
+	var padLen int = 4
 	msg := []byte("I am an unpadded message")
-	msgPadded := append(msg, STARTPADBYTE)
-	msgPadded = append(msgPadded, make([]byte, 4)...)
-	result := unPad(msgPadded)
+	msgPadded := append(msg, make([]byte, padLen)...)
+	result := unPad(msgPadded, len(msg))
 	require.Equal(t, msg, result)
 }
 

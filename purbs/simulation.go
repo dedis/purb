@@ -5,19 +5,20 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/rand"
+	"os"
 	"syscall"
+	"time"
 
 	"github.com/dedis/purb/experiments-encoding/pgp"
 	"gopkg.in/dedis/kyber.v2/group/curve25519"
 	"gopkg.in/dedis/kyber.v2/util/key"
 	"gopkg.in/dedis/kyber.v2/util/random"
-	"math/rand"
-	"os"
-	"time"
 )
 
-// Fixed for the simulation: 16-byte symmetric key + 4-byte offset position + 16-byte authentication tag
-const ENTRYPOINT_LENGTH = 16 + 4 + 16
+// Fixed for the simulation: 16-byte symmetric key + 4-byte offset start position
+// + 4-byte offset end position + 16-byte authentication tag
+const ENTRYPOINT_LENGTH = 16 + 4 + 4 + 16
 
 const message_size = 1024 // 1 KB
 const simulationIsVerbose = false
@@ -82,7 +83,7 @@ func SimulMeasureEncodingTime(nRepeat int, recipients []int, suites []int) strin
 				resultsLayout.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 
 				// creation of the encrypted payload
-				purb.padThenEncryptData(msg, purb.Stream)
+				purb.encryptThenPadData(msg, purb.Stream)
 
 				resultsPayload.add(nRecipients, nSuites, k, -1, -1, nRepeat, m.recordAndReset())
 				// converts everything to []byte, performs the XOR trick on the cornerstones

@@ -1,42 +1,26 @@
 package purbs
 
 import (
-	"bytes"
+	"gopkg.in/dedis/kyber.v2/util/random"
 	"math"
 )
 
-// For the padding we use scheme ISO/IEC 7816-4:2005 as the most space efficient.
-// The first byte of padding is a mandatory byte valued '80' (Hexadecimal) followed,
-// if needed, by 0 to N-1 bytes set to '00', until the end of the block is reached.
-//Example: In the following example the block size is 8 bytes and padding is required for 4 bytes
-//... | DD DD DD DD DD DD DD DD | DD DD DD DD 80 00 00 00 |
-//The next example shows a padding of just one byte
-//... | DD DD DD DD DD DD DD DD | DD DD DD DD DD DD DD 80 |
-// https://en.wikipedia.org/wiki/Padding_(cryptography)#ISO/IEC_7816-4
-
-// The byte value that signals that it's the start of padding.
-const STARTPADBYTE = 0x80
-
-// Pads a message according the defined scheme.
+// Pads a message with random bytes as defined by Padmé.
 // 'other' is a number of additional bytes in purb (header, nonce, mac)
 // that need to be taken into account when computing the amount of padding.
 func pad(msg []byte, other int) []byte {
 	var paddedMsg []byte
-	// STARTPADBYTE must be always present so we append it first and then compute
-	// amount of zero padding needed
-	msg = append(msg, STARTPADBYTE)
 	msgLen := uint64(len(msg) + other) // Length in bytes
 	padLen := paddingLength(msgLen)
-	// Padding the message with zero bytes
-	pad := make([]byte, padLen)
+
+	pad := getRandomBytes(padLen)
 	paddedMsg = append(msg, pad...)
 	return paddedMsg
 }
 
 // UnPads a padded message
-func unPad(msg []byte) []byte {
-	stop := bytes.LastIndexByte(msg, STARTPADBYTE)
-	return msg[:stop]
+func unPad(msg []byte, end int) []byte {
+	return msg[:end]
 }
 
 // Computes amount of padding needed
@@ -54,7 +38,18 @@ func paddingLength(msgLen uint64) int {
 // Returns number of bytes at the end that are required to be zero in the binary
 // representation of message length l.
 func zeroBytesNeeded(l uint64) uint64 {
+	// the corner case of 1-byte message
+	if l == 1 {
+		return uint64(0)
+	}
 	E := math.Floor(math.Log2(float64(l)))
 	S := math.Floor(math.Log2(E)) + 1
 	return uint64(E - S)
+}
+
+// Generates an array of random bytes of the required length
+func getRandomBytes(l int) []byte {
+	b := make([]byte, l)
+	random.Bytes(b, random.New())
+	return b
 }
