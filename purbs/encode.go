@@ -54,7 +54,7 @@ func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *P
 	purb.CreateHeader()
 
 	// creation of the encrypted payload
-	purb.padThenEncryptData(data, stream)
+	purb.encryptThenPadData(data, stream)
 
 	// converts everything to []byte, performs the XOR trick on the cornerstones
 	purb.placePayloadAndCornerstones(stream)
@@ -403,20 +403,19 @@ func (purb *Purb) placeEntrypointsSimplified() {
 	}
 }
 
-// padThenEncryptData takes plaintext data as a byte slice, pads it using PURBs padding scheme,
-// and then encrypts using AEAD encryption scheme
-func (purb *Purb) padThenEncryptData(data []byte, stream cipher.Stream) {
-	paddedData := pad(data, purb.Header.Length()+MAC_AUTHENTICATION_TAG_LENGTH)
-
+// encryptThenPadData takes plaintext data as a byte slice, encrypts it using a stream cipher,
+// then pads it with random bytes using Padmé
+func (purb *Purb) encryptThenPadData(data []byte, stream cipher.Stream) {
+	payloadKey := KDF("enc", purb.SessionKey)
+	encryptedData := streamEncrypt(data, payloadKey)
+	purb.EncryptedDataLen = len(encryptedData)
 	if purb.IsVerbose {
-		log.LLvlf3("Payload padded from %v to %v bytes", len(data), len(paddedData))
+		log.LLvlf3("Payload encrypted to %v (len %v)", encryptedData, len(encryptedData))
 	}
 
-	payloadKey := KDF("enc", purb.SessionKey)
-	purb.Payload = streamEncrypt(paddedData, payloadKey)
-
+	purb.Payload = pad(encryptedData, purb.Header.Length()+MAC_AUTHENTICATION_TAG_LENGTH)
 	if purb.IsVerbose {
-		log.LLvlf3("Payload padded encrypted to %v (len %v)", purb.Payload, len(purb.Payload))
+		log.LLvlf3("Encrypted payload padded from %v to %v bytes", len(encryptedData), len(purb.Payload))
 	}
 }
 
@@ -448,11 +447,15 @@ func (purb *Purb) placePayloadAndCornerstones(stream cipher.Stream) {
 		}
 	}
 
-	// encrypt and copy entrypoints
-	payloadOffset := make([]byte, OFFSET_POINTER_LEN)
-	binary.BigEndian.PutUint32(payloadOffset, uint32(purb.Header.Length()))
+	// record payload start and payload end
+	payloadStartOffset := make([]byte, START_OFFSET_LEN)
+	binary.BigEndian.PutUint32(payloadStartOffset, uint32(purb.Header.Length()))
+	payloadEndOffset := make([]byte, END_OFFSET_LEN)
+	binary.BigEndian.PutUint32(payloadEndOffset, uint32(purb.Header.Length()+purb.EncryptedDataLen))
 
-	entrypointContent := append(purb.SessionKey, payloadOffset...)
+	// encrypt and copy entrypoints
+	entrypointContent := append(purb.SessionKey, payloadStartOffset...)
+	entrypointContent = append(entrypointContent, payloadEndOffset...)
 	for _, entrypointsPerSuite := range purb.Header.EntryPoints {
 		for _, entrypoint := range entrypointsPerSuite {
 			startPos := entrypoint.Offset

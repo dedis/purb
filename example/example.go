@@ -3,10 +3,10 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/dedis/purb/purbs"
 	"gopkg.in/dedis/kyber.v2/group/curve25519"
 	"gopkg.in/dedis/kyber.v2/util/key"
 	"gopkg.in/dedis/kyber.v2/util/random"
-	"github.com/dedis/purb/purbs"
 )
 
 func main() {
@@ -55,7 +55,7 @@ func main() {
 func getDummySuiteInfo() purbs.SuiteInfoMap {
 	info := make(purbs.SuiteInfoMap)
 	cornerstoneLength := 32 // defined by Curve 25519
-	entryPointLength := 16 + 4 + 16 // 16-byte symmetric key + 4-byte offset position + 16-byte authentication tag
+	entryPointLength := 16 + 4 + 4 + 16 // 16-byte symmetric key + 2 * 4-byte offset positions + 16-byte authentication tag
 	info[curve25519.NewBlakeSHA256Curve25519(true).String()] = &purbs.SuiteInfo{
 		AllowedPositions: []int{12 + 0*cornerstoneLength, 12 + 1*cornerstoneLength, 12 + 3*cornerstoneLength, 12 + 4*cornerstoneLength},
 		CornerstoneLength: cornerstoneLength, EntryPointLength: entryPointLength}
