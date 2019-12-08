@@ -157,6 +157,29 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 	}
 }
 
+func TestMacCornerstoneOverlap(t *testing.T) {
+	data := []byte("SomeInfo")
+	infoMap := getDummySuiteInfoWithMultipleSuitePositions()
+	recipients := createRecipients(1, 1, infoMap)
+
+	log.Lvl1("Testing the resolution of a MAC and a cornerstone position overlap")
+	publicFixedParams := NewPublicFixedParameters(infoMap, false)
+
+	purb, err := Encode(data, recipients, random.New(), publicFixedParams, true)
+	if err != nil {
+		t.Error(err)
+	}
+	blob := purb.ToBytes()
+
+	// try decode
+	success, message, err := Decode(blob, &recipients[0], publicFixedParams, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+	require.True(t, success)
+	require.Equal(t, data, message)
+}
+
 func getDummySuiteInfo(N int) SuiteInfoMap {
 
 	entryPointLen := 16 + 4 + 4 + 16
@@ -181,6 +204,21 @@ func getDummySuiteInfo(N int) SuiteInfoMap {
 		info[curve25519.NewBlakeSHA256Curve25519(true).String()+suffixes[i]] = &SuiteInfo{
 			AllowedPositions: positions[i], CornerstoneLength: cornerstoneLen, EntryPointLength: entryPointLen}
 	}
+
+	return info
+}
+
+func getDummySuiteInfoWithMultipleSuitePositions() SuiteInfoMap {
+	entryPointLen := 16 + 4 + 4 + 16
+	cornerstoneLen := 32
+	//aeadNonceLen := 12
+
+	// we create N times the same suite
+	info := make(SuiteInfoMap)
+	positions := []int{0, 2 * cornerstoneLen, 3 * cornerstoneLen, 5 * cornerstoneLen}
+
+	info[curve25519.NewBlakeSHA256Curve25519(true).String()] = &SuiteInfo{
+		AllowedPositions: positions, CornerstoneLength: cornerstoneLen, EntryPointLength: entryPointLen}
 
 	return info
 }

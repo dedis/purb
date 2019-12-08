@@ -403,6 +403,26 @@ func (purb *Purb) placeEntrypointsSimplified() {
 	}
 }
 
+// Checks whether the provided byte range for MAC overlaps with any allowed cornerstone position
+// for all the suites used in the PURB.
+// Returns true in the case of overlap, and false otherwise.
+func (purb *Purb) macOverlapsWithAllowedPositions(macStart, macEnd int) bool {
+	for _, cornerstone := range purb.Header.Cornerstones {
+		cornerstoneLength := len(cornerstone.Bytes)
+		for _, cornerstoneStartPos := range purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].AllowedPositions {
+			cornerstoneEndPos := cornerstoneStartPos + cornerstoneLength
+			if macStart < cornerstoneEndPos && macEnd > cornerstoneStartPos {
+				if purb.IsVerbose {
+					log.LLvlf3("Overlap with MAC detected: MAC from %v to %v, cornerstone from %v to %v. Going to "+
+						"re-pad...", macStart, macEnd, cornerstoneStartPos, cornerstoneEndPos)
+				}
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // encryptThenPadData takes plaintext data as a byte slice, encrypts it using a stream cipher,
 // then pads it with random bytes using Padmé
 func (purb *Purb) encryptThenPadData(data []byte, stream cipher.Stream) {
@@ -414,6 +434,12 @@ func (purb *Purb) encryptThenPadData(data []byte, stream cipher.Stream) {
 	}
 
 	purb.Payload = pad(encryptedData, purb.Header.Length()+MAC_AUTHENTICATION_TAG_LENGTH)
+	// If MAC overlaps with some allowed cornerstone position, add one random byte to move to next allowed padding length
+	for purb.macOverlapsWithAllowedPositions(purb.Header.Length()+len(purb.Payload), purb.Header.Length()+len(purb.Payload)+MAC_AUTHENTICATION_TAG_LENGTH) {
+		randomByte := make([]byte, 1)
+		random.Bytes(randomByte, random.New())
+		purb.Payload = pad(append(purb.Payload, randomByte...), purb.Header.Length()+MAC_AUTHENTICATION_TAG_LENGTH)
+	}
 	if purb.IsVerbose {
 		log.LLvlf3("Encrypted payload padded from %v to %v bytes", len(encryptedData), len(purb.Payload))
 	}

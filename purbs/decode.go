@@ -23,24 +23,21 @@ func Decode(blob []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 		return false, nil, errors.New("no positions suiteInfo for this suite")
 	}
 
-	// we must not take MAC into account when computing public-key XOR
-	data := blob[:len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
-
 	// XOR all the possible suite positions to computer the cornerstone value
 	cornerstone := make([]byte, suiteInfo.CornerstoneLength)
 	for _, startPos := range suiteInfo.AllowedPositions {
 		endPos := startPos + suiteInfo.CornerstoneLength
-		if startPos > len(data) {
-			if startPos > len(data) {
+		if startPos > len(blob) {
+			if startPos > len(blob) {
 				break
 			} else {
-				endPos = len(data)
+				endPos = len(blob)
 			}
 		}
-		if endPos > len(data) {
-			endPos = len(data)
+		if endPos > len(blob) {
+			endPos = len(blob)
 		}
-		cornerstoneBytes := data[startPos:endPos]
+		cornerstoneBytes := blob[startPos:endPos]
 
 		if verbose {
 			log.LLvlf3("XORing in the bytes [%v:%v], value %v", startPos, endPos, cornerstoneBytes)
