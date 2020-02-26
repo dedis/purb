@@ -1,22 +1,13 @@
-.PHONY: install example demo test simul padme-figures clean install-experiments
+.PHONY: all example test install-experiments simul padme-figures
 
-install:
-	go get -u -tags=vartime -v ./...
+all: example test
 
-demo: example
 example:
-	go run -tags=vartime example/example.go
+	cd example && go build && ./example
 
 test:
-	$(MAKE) -C purbs test
-
-lint:
-	$(MAKE) -C purbs lint
-
-clean:
-	rm -f simul_*.txt
-
-all: install test example
+	cd purbs && go test
+	cd experiments-encoding/pgp && go test
 
 # only needed for experiments
 

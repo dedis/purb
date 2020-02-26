@@ -1,13 +1,14 @@
 package purbs
 
 import (
-	"github.com/stretchr/testify/require"
-	"gopkg.in/dedis/kyber.v2/group/curve25519"
-	"gopkg.in/dedis/kyber.v2/util/key"
-	"gopkg.in/dedis/kyber.v2/util/random"
-	"gopkg.in/dedis/onet.v2/log"
+	"log"
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.dedis.ch/kyber/v3/group/curve25519"
+	"go.dedis.ch/kyber/v3/util/key"
+	"go.dedis.ch/kyber/v3/util/random"
 )
 
 func TestGenCornerstones(t *testing.T) {
@@ -51,7 +52,7 @@ func TestPurbCreation(t *testing.T) {
 		t.Error(err)
 	}
 
-	log.Lvl1(purb.VisualRepresentation(true))
+	log.Println(purb.VisualRepresentation(true))
 }
 
 func TestEncodeDecode(t *testing.T) {
@@ -73,7 +74,7 @@ func TestEncodeDecode(t *testing.T) {
 	for nSuites := 1; nSuites < maxSuites; nSuites++ {
 		for nRecipients := 1; nRecipients < maxRecipients; nRecipients++ {
 
-			log.Lvl1("Testing for", nSuites, "suites and", nRecipients, "Recipients")
+			log.Println("Testing for", nSuites, "suites and", nRecipients, "Recipients")
 			suitesInfo := getDummySuiteInfo(nSuites)
 			publicFixedParams := NewPublicFixedParameters(suitesInfo, simplified)
 
@@ -89,11 +90,11 @@ func TestEncodeDecode(t *testing.T) {
 			blob := purb.ToBytes()
 
 			// print for fun
-			//log.Lvl1(purb.visualRepresentation(true))
+			//log.Println(purb.visualRepresentation(true))
 
 			// try decode
 			for recipientsID := 0; recipientsID < nRecipients; recipientsID++ {
-				log.Lvl1("Decrypting for recipient", recipientsID)
+				log.Println("Decrypting for recipient", recipientsID)
 				success, message, err := Decode(blob, &recipients[0], publicFixedParams, verbose)
 				if err != nil {
 					log.Fatal(err)
@@ -124,7 +125,7 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 	for nSuites := 1; nSuites < maxSuites; nSuites++ {
 		for nRecipients := 1; nRecipients < maxRecipients; nRecipients++ {
 
-			log.Lvl1("Testing for", nSuites, "suites and", nRecipients, "Recipients")
+			log.Println("Testing for", nSuites, "suites and", nRecipients, "Recipients")
 			suitesInfo := getDummySuiteInfo(nSuites)
 			publicFixedParams := NewPublicFixedParameters(suitesInfo, simplified)
 
@@ -140,11 +141,11 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 			blob := purb.ToBytes()
 
 			// print for fun
-			//log.Lvl1(purb.visualRepresentation(true))
+			//log.Println(purb.visualRepresentation(true))
 
 			// try decode
 			for recipientsID := 0; recipientsID < nRecipients; recipientsID++ {
-				log.Lvl1("Decrypting for recipient", recipientsID)
+				log.Println("Decrypting for recipient", recipientsID)
 				success, message, err := Decode(blob, &recipients[0], publicFixedParams, verbose)
 				if err != nil {
 					log.Fatal(err)
@@ -162,7 +163,7 @@ func TestMacCornerstoneOverlap(t *testing.T) {
 	infoMap := getDummySuiteInfoWithMultipleSuitePositions()
 	recipients := createRecipients(1, 1, infoMap)
 
-	log.Lvl1("Testing the resolution of a MAC and a cornerstone position overlap")
+	log.Println("Testing the resolution of a MAC and a cornerstone position overlap")
 	publicFixedParams := NewPublicFixedParameters(infoMap, false)
 
 	purb, err := Encode(data, recipients, random.New(), publicFixedParams, true)

@@ -1,9 +1,7 @@
 language: go
 
-install:
-- go get github.com/stretchr/testify/require
-- make install
+go:
+- 1.13.x
 
-script:
-- make test
-- make lint
+# The default for Travis, language Go, is if makefile exists, then run "make",
+# which is good enough for us.

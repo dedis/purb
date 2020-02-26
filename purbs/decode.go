@@ -5,9 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"log"
 
-	kyber "gopkg.in/dedis/kyber.v2"
-	log "gopkg.in/dedis/onet.v2/log"
+	"go.dedis.ch/kyber/v3"
 )
 
 // Decode takes a PURB blob and a recipient info (suite+KeyPair) and extracts the payload
@@ -16,7 +16,7 @@ func Decode(blob []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 	suiteInfo := publicFixedParameters.SuiteInfoMap[suiteName]
 
 	if verbose {
-		log.LLvlf3("Attempting to decode using suite %v, len %v, positions %v", suiteName, suiteInfo.CornerstoneLength, suiteInfo.AllowedPositions)
+		log.Printf("Attempting to decode using suite %v, len %v, positions %v", suiteName, suiteInfo.CornerstoneLength, suiteInfo.AllowedPositions)
 	}
 
 	if suiteInfo == nil {
@@ -40,7 +40,7 @@ func Decode(blob []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 		cornerstoneBytes := blob[startPos:endPos]
 
 		if verbose {
-			log.LLvlf3("XORing in the bytes [%v:%v], value %v", startPos, endPos, cornerstoneBytes)
+			log.Printf("XORing in the bytes [%v:%v], value %v", startPos, endPos, cornerstoneBytes)
 		}
 
 		for j := range cornerstoneBytes {
@@ -49,7 +49,7 @@ func Decode(blob []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 	}
 
 	if verbose {
-		log.LLvlf3("Recovered cornerstone has value %v, len %v", cornerstone, len(cornerstone))
+		log.Printf("Recovered cornerstone has value %v, len %v", cornerstone, len(cornerstone))
 	}
 
 	//Now that we have the SessionKey for our suite, calculate the shared SessionKey
@@ -64,8 +64,8 @@ func Decode(blob []byte, recipient *Recipient, publicFixedParameters *PurbPublic
 	sharedSecret := KDF("", sharedBytes)
 
 	if verbose {
-		log.LLvlf3("Recovered sharedbytes value %v, len %v", sharedBytes, len(sharedBytes))
-		log.LLvlf3("Recovered sharedsecret value %v, len %v", sharedSecret, len(sharedSecret))
+		log.Printf("Recovered sharedbytes value %v, len %v", sharedBytes, len(sharedBytes))
+		log.Printf("Recovered sharedsecret value %v, len %v", sharedSecret, len(sharedSecret))
 	}
 
 	// Now we try to decrypt iteratively the entrypoints and check if the decrypted SessionKey works for AEAD of payload
@@ -105,9 +105,9 @@ func entrypointTrialDecode(blob []byte, recipient *Recipient, sharedSecret []byt
 			}
 
 			if verbose {
-				log.LLvlf3("Recovering potential entrypoint [%v:%v], value %v", entrypointStartPos, entrypointEndPos, data[entrypointStartPos:entrypointEndPos])
-				log.LLvlf3("  Attempting decryption with sharedSecret %v", sharedSecret)
-				log.LLvlf3("  yield %v", decrypted)
+				log.Printf("Recovering potential entrypoint [%v:%v], value %v", entrypointStartPos, entrypointEndPos, data[entrypointStartPos:entrypointEndPos])
+				log.Printf("  Attempting decryption with sharedSecret %v", sharedSecret)
+				log.Printf("  yield %v", decrypted)
 			}
 
 			ok := verifyMAC(decrypted, blob)
@@ -118,7 +118,7 @@ func entrypointTrialDecode(blob []byte, recipient *Recipient, sharedSecret []byt
 			found, errorReason, message := payloadDecrypt(decrypted, data)
 
 			if verbose {
-				log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
+				log.Printf("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
 			}
 
 			if found {
@@ -159,7 +159,7 @@ func entrypointTrialDecodeSimplified(blob []byte, recipient *Recipient, sharedSe
 		found, errorReason, message := payloadDecrypt(decrypted, data)
 
 		if verbose {
-			log.LLvlf3("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
+			log.Printf("  found=%v, reason=%v, decrypted=%v", found, errorReason, message)
 		}
 		if found {
 			return found, message, nil

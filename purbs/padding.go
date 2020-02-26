@@ -1,8 +1,9 @@
 package purbs
 
 import (
-	"gopkg.in/dedis/kyber.v2/util/random"
 	"math"
+
+	"go.dedis.ch/kyber/v3/util/random"
 )
 
 // Pads a message with random bytes as defined by Padmé.

@@ -1,9 +1,10 @@
 package purbs
 
 import (
-	"github.com/stretchr/testify/require"
-	"gopkg.in/dedis/onet.v2/log"
+	"log"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestStreamCipher(t *testing.T) {
@@ -11,7 +12,7 @@ func TestStreamCipher(t *testing.T) {
 	key := []byte("full of entropy")
 
 	ctxt := streamEncrypt(data, key)
-	log.Lvl2("Encrypted stream output: ", ctxt)
+	log.Println("Encrypted stream output: ", ctxt)
 	plxt := streamDecrypt(ctxt, key)
 
 	require.Equal(t, data, plxt)

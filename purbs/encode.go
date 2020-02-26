@@ -5,12 +5,12 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
+	"log"
 	"sort"
 	"strconv"
 
-	"gopkg.in/dedis/kyber.v2/util/key"
-	"gopkg.in/dedis/kyber.v2/util/random"
-	"gopkg.in/dedis/onet.v2/log"
+	"go.dedis.ch/kyber/v3/util/key"
+	"go.dedis.ch/kyber/v3/util/random"
 )
 
 // Creates a struct with parameters that are *fixed* across all PURBs. Should be constants, but here it is a variable for simulating various parameters
@@ -43,10 +43,10 @@ func Encode(data []byte, recipients []Recipient, stream cipher.Stream, params *P
 	purb.SessionKey = purb.randomBytes(SYMMETRIC_KEY_LENGTH)
 
 	if purb.IsVerbose {
-		log.LLvlf3("Created an empty PURB, original data %v, payload key %v, nonce %v", data, purb.SessionKey, purb.Nonce)
-		log.LLvlf3("Recipients %+v", recipients)
+		log.Printf("Created an empty PURB, original data %v, payload key %v, nonce %v", data, purb.SessionKey, purb.Nonce)
+		log.Printf("Recipients %+v", recipients)
 		for i := range purb.PublicParameters.SuiteInfoMap {
-			log.LLvlf3("SuiteInfoMap [%v]: len %v, positions %+v", i, purb.PublicParameters.SuiteInfoMap[i].CornerstoneLength, purb.PublicParameters.SuiteInfoMap[i].AllowedPositions)
+			log.Printf("SuiteInfoMap [%v]: len %v, positions %+v", i, purb.PublicParameters.SuiteInfoMap[i].CornerstoneLength, purb.PublicParameters.SuiteInfoMap[i].AllowedPositions)
 		}
 	}
 
@@ -119,7 +119,7 @@ func (purb *Purb) createCornerstones() {
 		header.Cornerstones[recipient.SuiteName] = cornerstone
 
 		if purb.IsVerbose {
-			log.LLvlf3("Created cornerstone[%v], value %v", recipient.SuiteName, cornerstone.Bytes)
+			log.Printf("Created cornerstone[%v], value %v", recipient.SuiteName, cornerstone.Bytes)
 		}
 	}
 }
@@ -157,7 +157,7 @@ func (purb *Purb) createEntryPoints() {
 		sharedSecret := KDF("", sharedBytes)
 
 		if purb.IsVerbose {
-			log.LLvlf3("Shared secret with suite=%v, entrypoint value %v", recipient.SuiteName, sharedBytes)
+			log.Printf("Shared secret with suite=%v, entrypoint value %v", recipient.SuiteName, sharedBytes)
 		}
 
 		ep := &EntryPoint{
@@ -185,9 +185,9 @@ func placeCornerstonesHelper(
 
 	if len(cornerstonesToPlace) == 0 {
 		if verbose {
-			log.LLvlf3("Placed all cornerstones!")
+			log.Printf("Placed all cornerstones!")
 			for _, c := range placedCornerstones {
-				log.LLvl3("  ", c.SuiteName, "between", c.Offset, c.EndPos)
+				log.Println("  ", c.SuiteName, "between", c.Offset, c.EndPos)
 			}
 		}
 		return placedCornerstones
@@ -249,7 +249,7 @@ func placeCornerstonesHelper(
 		})
 
 		if verbose {
-			log.LLvl3("Attempting position", startBit, endBit, "for suite", cornerstone.SuiteName)
+			log.Println("Attempting position", startBit, endBit, "for suite", cornerstone.SuiteName)
 		}
 
 		// filter the one we just placed
@@ -321,7 +321,7 @@ func (purb *Purb) placeCornerstones() {
 		}
 
 		if purb.IsVerbose {
-			log.LLvlf3("Position for cornerstone %v is start %v, end %v", cornerstone.SuiteName, cornerstone.Offset, cornerstone.EndPos)
+			log.Printf("Position for cornerstone %v is start %v, end %v", cornerstone.SuiteName, cornerstone.Offset, cornerstone.EndPos)
 		}
 	}
 }
@@ -357,7 +357,7 @@ func (purb *Purb) placeEntrypoints() {
 						positionFound = true
 
 						if purb.IsVerbose {
-							log.LLvlf3("Found position for entrypoint %v of suite %v, table size %v, linear %v, start %v, end %v", entrypointID, suite, tableSize, j, effectiveStartPos, effectiveEndPos)
+							log.Printf("Found position for entrypoint %v of suite %v, table size %v, linear %v, start %v, end %v", entrypointID, suite, tableSize, j, effectiveStartPos, effectiveEndPos)
 						}
 
 						break
@@ -390,7 +390,7 @@ func (purb *Purb) placeEntrypointsSimplified() {
 					endPos := startPos + entrypoint.Length
 
 					if purb.IsVerbose {
-						log.LLvlf3("Found position for entrypoint %v of suite %v, SIMPLIFIED, start %v, end %v", entryPointID, suite, startPos, endPos)
+						log.Printf("Found position for entrypoint %v of suite %v, SIMPLIFIED, start %v, end %v", entryPointID, suite, startPos, endPos)
 					}
 
 					//log.Printf("Placing entry at [%d-%d]", startPos, startPos+h.EntryPointLength)
@@ -413,7 +413,7 @@ func (purb *Purb) macOverlapsWithAllowedPositions(macStart, macEnd int) bool {
 			cornerstoneEndPos := cornerstoneStartPos + cornerstoneLength
 			if macStart < cornerstoneEndPos && macEnd > cornerstoneStartPos {
 				if purb.IsVerbose {
-					log.LLvlf3("Overlap with MAC detected: MAC from %v to %v, cornerstone from %v to %v. Going to "+
+					log.Printf("Overlap with MAC detected: MAC from %v to %v, cornerstone from %v to %v. Going to "+
 						"re-pad...", macStart, macEnd, cornerstoneStartPos, cornerstoneEndPos)
 				}
 				return true
@@ -430,7 +430,7 @@ func (purb *Purb) encryptThenPadData(data []byte, stream cipher.Stream) {
 	encryptedData := streamEncrypt(data, payloadKey)
 	purb.EncryptedDataLen = len(encryptedData)
 	if purb.IsVerbose {
-		log.LLvlf3("Payload encrypted to %v (len %v)", encryptedData, len(encryptedData))
+		log.Printf("Payload encrypted to %v (len %v)", encryptedData, len(encryptedData))
 	}
 
 	purb.Payload = pad(encryptedData, purb.Header.Length()+MAC_AUTHENTICATION_TAG_LENGTH)
@@ -441,7 +441,7 @@ func (purb *Purb) encryptThenPadData(data []byte, stream cipher.Stream) {
 		purb.Payload = pad(append(purb.Payload, randomByte...), purb.Header.Length()+MAC_AUTHENTICATION_TAG_LENGTH)
 	}
 	if purb.IsVerbose {
-		log.LLvlf3("Encrypted payload padded from %v to %v bytes", len(encryptedData), len(purb.Payload))
+		log.Printf("Encrypted payload padded from %v to %v bytes", len(encryptedData), len(purb.Payload))
 	}
 }
 
@@ -455,7 +455,7 @@ func (purb *Purb) placePayloadAndCornerstones(stream cipher.Stream) {
 		copy(region, purb.Nonce)
 
 		if purb.IsVerbose {
-			log.LLvlf3("Adding nonce in [%v:%v], value %v, len %v", 0, NONCE_LENGTH, purb.Nonce, len(purb.Nonce))
+			log.Printf("Adding nonce in [%v:%v], value %v, len %v", 0, NONCE_LENGTH, purb.Nonce, len(purb.Nonce))
 		}
 	}
 
@@ -469,7 +469,7 @@ func (purb *Purb) placePayloadAndCornerstones(stream cipher.Stream) {
 		copy(region, cornerstone.Bytes)
 
 		if purb.IsVerbose {
-			log.LLvlf3("Adding cornerstone in [%v:%v], value %v, len %v", startPos, endPos, cornerstone.Bytes, length)
+			log.Printf("Adding cornerstone in [%v:%v], value %v, len %v", startPos, endPos, cornerstone.Bytes, length)
 		}
 	}
 
@@ -499,7 +499,7 @@ func (purb *Purb) placePayloadAndCornerstones(stream cipher.Stream) {
 			}
 
 			if purb.IsVerbose {
-				log.LLvlf3("Adding symmetric entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v", startPos, endPos, entrypointContent, region, entrypoint.SharedSecret, len(entrypointContent))
+				log.Printf("Adding symmetric entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v", startPos, endPos, entrypointContent, region, entrypoint.SharedSecret, len(entrypointContent))
 			}
 		}
 	}
@@ -510,7 +510,7 @@ func (purb *Purb) placePayloadAndCornerstones(stream cipher.Stream) {
 		purb.Stream.XORKeyStream(region, region)
 
 		if purb.IsVerbose {
-			log.LLvlf3("Adding random bytes in [%v:%v]", low, high)
+			log.Printf("Adding random bytes in [%v:%v]", low, high)
 		}
 	}
 	purb.Header.Layout.ScanFreeRegions(fillRndFunction, buffer.length())
@@ -521,7 +521,7 @@ func (purb *Purb) placePayloadAndCornerstones(stream cipher.Stream) {
 	// copy message into buffer
 
 	if purb.IsVerbose {
-		log.LLvlf3("Adding payload in [%v:%v], value %v, len %v", buffer.length(), buffer.length()+len(purb.Payload), purb.Payload, len(purb.Payload))
+		log.Printf("Adding payload in [%v:%v], value %v, len %v", buffer.length(), buffer.length()+len(purb.Payload), purb.Payload, len(purb.Payload))
 	}
 	buffer.append(purb.Payload)
 

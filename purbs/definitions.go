@@ -3,8 +3,8 @@ package purbs
 import (
 	"crypto/cipher"
 
-	kyber "gopkg.in/dedis/kyber.v2"
-	"gopkg.in/dedis/kyber.v2/util/key"
+	"go.dedis.ch/kyber/v3"
+	"go.dedis.ch/kyber/v3/util/key"
 )
 
 // Length (in bytes) of the symmetric key used to encrypt the payload

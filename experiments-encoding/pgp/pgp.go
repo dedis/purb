@@ -2,21 +2,19 @@ package pgp
 
 import (
 	"bytes"
+	"crypto"
+	"crypto/elliptic"
+	"crypto/rand"
+	"errors"
+	"log"
+	"math/big"
 	"time"
 
-	"errors"
-
-	"crypto"
-	"crypto/rand"
-
-	"crypto/elliptic"
 	"github.com/nikirill/go-crypto/curve25519"
 	"github.com/nikirill/go-crypto/openpgp"
 	"github.com/nikirill/go-crypto/openpgp/armor"
 	"github.com/nikirill/go-crypto/openpgp/ecdh"
 	"github.com/nikirill/go-crypto/openpgp/packet"
-	"gopkg.in/dedis/onet.v1/log"
-	"math/big"
 )
 
 /*
@@ -108,7 +106,9 @@ func (p *PGP) Verify(data []byte, sigStr string) error {
 	in := bytes.NewBufferString(sigStr)
 
 	block, err := armor.Decode(in)
-	log.ErrFatal(err)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if block.Type != openpgp.SignatureType {
 		log.Fatal("Invalid signature file")
@@ -116,7 +116,9 @@ func (p *PGP) Verify(data []byte, sigStr string) error {
 
 	reader := packet.NewReader(block.Body)
 	pkt, err := reader.Next()
-	log.ErrFatal(err)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	sig, ok := pkt.(*packet.Signature)
 	if !ok {
@@ -132,28 +134,55 @@ func (p *PGP) Verify(data []byte, sigStr string) error {
 func ArmorEncryption(enc []byte) string {
 	arm := &bytes.Buffer{}
 	wArm, err := armor.Encode(arm, "Message", make(map[string]string))
-	log.ErrFatal(err)
+	if err != nil {
+		log.Fatal(err)
+	}
 	wArm.Write(enc)
-	log.ErrFatal(wArm.Close())
+	if err != nil {
+		log.Fatal(wArm.Close())
+	}
 	return arm.String()
 }
 
 func (p *PGP) ArmorPrivate() string {
 	priv := &bytes.Buffer{}
+
 	wPriv, err := armor.Encode(priv, openpgp.PrivateKeyType, make(map[string]string))
-	log.ErrFatal(err)
-	log.ErrFatal(p.Private.Serialize(wPriv))
-	log.ErrFatal(wPriv.Close())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = p.Private.Serialize(wPriv)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = wPriv.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return priv.String()
 }
 
 func (p *PGP) ArmorPublic() string {
 	pub := &bytes.Buffer{}
-	wPub, err := armor.Encode(pub, openpgp.PublicKeyType, make(map[string]string))
-	log.ErrFatal(err)
 
-	log.ErrFatal(p.Public.Serialize(wPub))
-	log.ErrFatal(wPub.Close())
+	wPub, err := armor.Encode(pub, openpgp.PublicKeyType, make(map[string]string))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = p.Public.Serialize(wPub)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = wPub.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return pub.String()
 }
 
@@ -215,7 +244,9 @@ func DecodePrivate(priv string) *packet.PrivateKey {
 	// open ascii armored private key
 	in := bytes.NewBufferString(priv)
 	block, err := armor.Decode(in)
-	log.ErrFatal(err)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if block.Type != openpgp.PrivateKeyType {
 		log.Fatal("Invalid private key file")
@@ -223,7 +254,9 @@ func DecodePrivate(priv string) *packet.PrivateKey {
 
 	reader := packet.NewReader(block.Body)
 	pkt, err := reader.Next()
-	log.ErrFatal(err)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	key, ok := pkt.(*packet.PrivateKey)
 	if !ok {
@@ -235,7 +268,9 @@ func DecodePrivate(priv string) *packet.PrivateKey {
 func DecodePublic(pub string) *packet.PublicKey {
 	in := bytes.NewBufferString(pub)
 	block, err := armor.Decode(in)
-	log.ErrFatal(err)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if block.Type != openpgp.PublicKeyType {
 		log.Fatal("Invalid private key file")
@@ -243,7 +278,9 @@ func DecodePublic(pub string) *packet.PublicKey {
 
 	reader := packet.NewReader(block.Body)
 	pkt, err := reader.Next()
-	log.ErrFatal(err)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	key, ok := pkt.(*packet.PublicKey)
 	if !ok {

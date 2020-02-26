@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"gopkg.in/dedis/kyber.v2/group/curve25519"
-	"gopkg.in/dedis/kyber.v2/util/random"
+	"go.dedis.ch/kyber/v3/group/curve25519"
+	"go.dedis.ch/kyber/v3/util/random"
 )
 
 // Simply returns a string with the internal details of the PURB
