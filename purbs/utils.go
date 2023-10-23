@@ -24,15 +24,21 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 
 	lines = append(lines, "*** PURB Details ***")
 	lines = append(lines, fmt.Sprintf("Original Data: len %v", len(purb.OriginalData)))
-	lines = append(lines, fmt.Sprintf("PURB: header at 0 (len %v), payload at %v (len %v), total %v bytes", purb.Header.Length(), purb.Header.Length(), len(purb.Payload), len(bytes)))
+	lines = append(lines,
+		fmt.Sprintf("PURB: header at 0 (len %v), payload at %v (len %v), total %v bytes",
+			purb.Header.Length(), purb.Header.Length(), len(purb.Payload), len(bytes)))
 
 	lines = append(lines, fmt.Sprintf("Nonce: %+v (len %v)", purb.Nonce, len(purb.Nonce)))
 
 	for _, cornerstone := range purb.Header.Cornerstones {
-		lines = append(lines, fmt.Sprintf("Cornerstones: %+v @ offset %v (len %v)", cornerstone.SuiteName, cornerstone.Offset, purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].CornerstoneLength))
+		lines = append(lines,
+			fmt.Sprintf("Cornerstones: %+v @ offset %v (len %v)", cornerstone.SuiteName,
+				cornerstone.Offset,
+				purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].CornerstoneLength))
 
 		lines = append(lines, fmt.Sprintf("  Value: %v", cornerstone.Bytes))
-		lines = append(lines, fmt.Sprintf("  Allowed positions for this suite: %v", purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].AllowedPositions))
+		lines = append(lines, fmt.Sprintf("  Allowed positions for this suite: %v",
+			purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].AllowedPositions))
 
 		cornerstoneStartPosUsed := make([]int, 0)
 		for _, startPos := range purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].AllowedPositions {
@@ -48,7 +54,8 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 			if endPos > len(bytes) {
 				endPos = len(bytes)
 			}
-			cornerstoneRangesUsed = append(cornerstoneRangesUsed, strconv.Itoa(startPos)+":"+strconv.Itoa(endPos))
+			cornerstoneRangesUsed = append(cornerstoneRangesUsed,
+				strconv.Itoa(startPos)+":"+strconv.Itoa(endPos))
 			cornerstoneRangesValues = append(cornerstoneRangesValues, bytes[startPos:endPos])
 		}
 		lines = append(lines, fmt.Sprintf("  Positions used: %v", cornerstoneRangesUsed))
@@ -56,7 +63,8 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 		xor := make([]byte, len(cornerstoneRangesValues[0]))
 		// XORed, those values should give back the cornerstone value
 		for i := range cornerstoneRangesValues {
-			lines = append(lines, fmt.Sprintf("  Value @ pos[%v]: %v", cornerstoneRangesUsed[i], cornerstoneRangesValues[i]))
+			lines = append(lines, fmt.Sprintf("  Value @ pos[%v]: %v", cornerstoneRangesUsed[i],
+				cornerstoneRangesValues[i]))
 
 			for i, b := range cornerstoneRangesValues[i] {
 				xor[i] ^= b
@@ -69,12 +77,18 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 	for suiteName, entrypoints := range purb.Header.EntryPoints {
 		lines = append(lines, fmt.Sprintf("Entrypoints for suite %v", suiteName))
 		for index, entrypoint := range entrypoints {
-			lines = append(lines, fmt.Sprintf("  Entrypoints [%v]: %+v @ offset %v (len %v)", index, entrypoint.SharedSecret, entrypoint.Offset, entrypoint.Length))
+			lines = append(lines, fmt.Sprintf("  Entrypoints [%v]: %+v @ offset %v (len %v)", index,
+				entrypoint.SharedSecret, entrypoint.Offset, entrypoint.Length))
 		}
 	}
-	lines = append(lines, fmt.Sprintf("Padded Payload: %+v @ offset %v (len %v)", purb.Payload, purb.Header.Length(), len(purb.Payload)))
+	lines = append(lines,
+		fmt.Sprintf("Padded Payload: %+v @ offset %v (len %v)", purb.Payload, purb.Header.Length(),
+			len(purb.Payload)))
 
-	lines = append(lines, fmt.Sprintf("MAC: %+v @ offset %v (len %v)", getMAC(purb.byteRepresentation), len(purb.byteRepresentation)-MAC_AUTHENTICATION_TAG_LENGTH, MAC_AUTHENTICATION_TAG_LENGTH))
+	lines = append(lines,
+		fmt.Sprintf("MAC: %+v @ offset %v (len %v)", getMAC(purb.byteRepresentation),
+			len(purb.byteRepresentation)-MAC_AUTHENTICATION_TAG_LENGTH,
+			MAC_AUTHENTICATION_TAG_LENGTH))
 
 	if !withBoundaries {
 		return strings.Join(lines, "\n")

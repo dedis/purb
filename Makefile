@@ -1,13 +1,22 @@
-.PHONY: all example test install-experiments simul padme-figures
+.PHONY: install example demo test simul padme-figures clean install-experiments
 
-all: example test
+install:
+	go mod tidy
 
+demo: example
 example:
-	cd example && go build && ./example
+	go run -tags=vartime example/example.go
 
 test:
-	cd purbs && go test
-	cd experiments-encoding/pgp && go test
+	$(MAKE) -C purbs test
+
+lint:
+	$(MAKE) -C purbs lint
+
+clean:
+	rm -f simul_*.txt
+
+all: install test example
 
 # only needed for experiments
 

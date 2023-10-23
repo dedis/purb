@@ -4,10 +4,10 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/dedis/purb/purbs"
 	"go.dedis.ch/kyber/v3/group/curve25519"
 	"go.dedis.ch/kyber/v3/util/key"
 	"go.dedis.ch/kyber/v3/util/random"
-	"go.dedis.ch/purbs"
 )
 
 func main() {
@@ -58,8 +58,14 @@ func getDummySuiteInfo() purbs.SuiteInfoMap {
 	cornerstoneLength := 32             // defined by Curve 25519
 	entryPointLength := 16 + 4 + 4 + 16 // 16-byte symmetric key + 2 * 4-byte offset positions + 16-byte authentication tag
 	info[curve25519.NewBlakeSHA256Curve25519(true).String()] = &purbs.SuiteInfo{
-		AllowedPositions:  []int{12 + 0*cornerstoneLength, 12 + 1*cornerstoneLength, 12 + 3*cornerstoneLength, 12 + 4*cornerstoneLength},
-		CornerstoneLength: cornerstoneLength, EntryPointLength: entryPointLength}
+		AllowedPositions: []int{
+			12 + 0*cornerstoneLength,
+			12 + 1*cornerstoneLength,
+			12 + 3*cornerstoneLength,
+			12 + 4*cornerstoneLength,
+		},
+		CornerstoneLength: cornerstoneLength, EntryPointLength: entryPointLength,
+	}
 	return info
 }
 
@@ -69,7 +75,12 @@ func createRecipients(n int) []purbs.Recipient {
 	for _, suite := range suites {
 		for i := 0; i < n; i++ {
 			pair := key.NewKeyPair(suite)
-			decs = append(decs, purbs.Recipient{SuiteName: suite.String(), Suite: suite, PublicKey: pair.Public, PrivateKey: pair.Private})
+			decs = append(decs, purbs.Recipient{
+				SuiteName:  suite.String(),
+				Suite:      suite,
+				PublicKey:  pair.Public,
+				PrivateKey: pair.Private,
+			})
 		}
 	}
 	return decs
