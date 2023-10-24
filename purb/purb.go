@@ -2,31 +2,53 @@ package purb
 
 import "crypto/cipher"
 
-// This struct's contents are *not* parameters to the PURBs. Here they vary for the simulations and the plots, but they should be fixed for all purbs
+// This struct's contents are *not* parameters to the PURBs.
+// Here they vary for the simulations and the plots, but they should be fixed for all purbs
 type purbConfig struct {
-	suiteInfoMap                   SuiteInfoMap // public suite information (Allowed Positions, etc)
-	simplifiedEntrypointsPlacement bool         // If true, does not use hash tables for entrypoints
+	// public suite information (Allowed Positions, etc)
+	suiteInfoMap SuiteInfoMap
 
-	hashTableCollisionLinearResolutionAttempts int // Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
+	// If true, does not use hash tables for entrypoints
+	simplifiedEntrypointsPlacement bool
+
+	// Number of attempts to shift entrypoint position in a hash table by +1
+	// if the computed position is already occupied
+	hashTableCollisionLinearResolutionAttempts int
 }
 
 // Structure to define the whole PURB
 type Purb struct {
 	config *purbConfig
 
-	nonce      []byte // Nonce used in both AEAD of entrypoints and payload. The same for different entrypoints as the keys are different. It is stored in the very beginning of the purb
-	header     *Header
-	payload    []byte // Payload contains already encrypted and padded plaintext
-	sessionKey []byte // SessionKey is encapsulated and used to derive PayloadKey and MacKey
+	// nonce used in both AEAD of entrypoints and payload.
+	// The same for different entrypoints as the keys are different.
+	// It is stored in the very beginning of the purb
+	nonce  []byte
+	header *Header
 
-	recipients []Recipient   // tuple with (Suite, PublicKey, PrivateKey)
-	stream     cipher.Stream // used to get randomness
+	// payload contains already encrypted and padded plaintext
+	payload []byte
 
-	byteRepresentation []byte // the end-to-end random-looking bit array returned by ToBytes() is computed at creation time
+	// sessionKey is encapsulated and used to derive PayloadKey and MacKey
+	sessionKey []byte
 
-	encryptedDataLen int    // used to record the end of encrypted data in the entry points
-	originalData     []byte // kept to compare between "Payload" and this
-	isVerbose        bool   // if true, the various operations on the data structure will print what is happening
+	// tuple with (Suite, PublicKey, PrivateKey)
+	recipients []Recipient
+
+	// used to get randomness
+	stream cipher.Stream
+
+	// the end-to-end random-looking bit array returned by ToBytes() is computed at creation time
+	byteRepresentation []byte
+
+	// used to record the end of encrypted data in the entry points
+	encryptedDataLen int
+
+	// kept to compare between payload and originalData
+	originalData []byte
+
+	// if true, the various operations on the data structure will print what is happening
+	isVerbose bool
 }
 
 // Creates a new PURB struct with the given parameters

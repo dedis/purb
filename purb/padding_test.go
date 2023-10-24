@@ -17,7 +17,7 @@ func TestPad(t *testing.T) {
 }
 
 func TestUnPad(t *testing.T) {
-	var padLen int = 4
+	padLen := 4
 	msg := []byte("I am an unpadded message")
 	msgPadded := append(msg, make([]byte, padLen)...)
 	result := unPad(msgPadded, len(msg))

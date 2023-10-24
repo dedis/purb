@@ -33,9 +33,8 @@ func (p *Purb) Decode(
 		if startPos > len(blob) {
 			if startPos > len(blob) {
 				break
-			} else {
-				endPos = len(blob)
 			}
+			endPos = len(blob)
 		}
 		if endPos > len(blob) {
 			endPos = len(blob)
@@ -93,8 +92,8 @@ func entrypointTrialDecode(
 	hashTableStartPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
 	entrypointKey := KDF("key", sharedSecret)
-	nonce := blob[:NONCE_LENGTH]
-	data := blob[:len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
+	nonce := blob[:NonceLength]
+	data := blob[:len(blob)-MacAuthenticationTagLength]
 	for {
 		var entrypointIndexInHashTable int
 
@@ -159,8 +158,8 @@ func entrypointTrialDecodeSimplified(
 	startPos := suiteInfo.AllowedPositions[0] + suiteInfo.CornerstoneLength
 
 	entrypointKey := KDF("key", sharedSecret)
-	nonce := blob[:NONCE_LENGTH]
-	data := blob[:len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
+	nonce := blob[:NonceLength]
+	data := blob[:len(blob)-MacAuthenticationTagLength]
 	for startPos+suiteInfo.EntryPointLength < len(data) {
 		entrypointBytes := data[startPos : startPos+suiteInfo.EntryPointLength]
 		decrypted, err := aeadDecrypt(entrypointBytes, nonce, entrypointKey, nil)
@@ -189,11 +188,11 @@ func entrypointTrialDecodeSimplified(
 
 // verifies the authentication tag of a PURB
 func verifyMAC(entrypoint []byte, blob []byte) bool {
-	sessionKey := entrypoint[0:SYMMETRIC_KEY_LENGTH]
+	sessionKey := entrypoint[0:SymmetricKeyLength]
 	macKey := KDF("mac", sessionKey)
 
-	data := blob[:len(blob)-MAC_AUTHENTICATION_TAG_LENGTH]
-	tag := blob[len(blob)-MAC_AUTHENTICATION_TAG_LENGTH:]
+	data := blob[:len(blob)-MacAuthenticationTagLength]
+	tag := blob[len(blob)-MacAuthenticationTagLength:]
 
 	mac := hmac.New(sha256.New, macKey)
 	mac.Write(data)
@@ -203,11 +202,11 @@ func verifyMAC(entrypoint []byte, blob []byte) bool {
 
 func payloadDecrypt(entrypoint []byte, fullPURBBlob []byte) (bool, string, []byte) {
 	// verify pointers to payload
-	startPointerPos := len(entrypoint) - START_OFFSET_LEN - END_OFFSET_LEN
-	startPointerBytes := entrypoint[startPointerPos : startPointerPos+START_OFFSET_LEN]
+	startPointerPos := len(entrypoint) - StartOffsetLen - EndOffsetLen
+	startPointerBytes := entrypoint[startPointerPos : startPointerPos+StartOffsetLen]
 	startPointer := int(binary.BigEndian.Uint32(startPointerBytes))
-	endPointerPos := len(entrypoint) - END_OFFSET_LEN
-	endPointerBytes := entrypoint[endPointerPos : endPointerPos+END_OFFSET_LEN]
+	endPointerPos := len(entrypoint) - EndOffsetLen
+	endPointerBytes := entrypoint[endPointerPos : endPointerPos+EndOffsetLen]
 	endPointer := int(binary.BigEndian.Uint32(endPointerBytes))
 	if startPointer > len(fullPURBBlob) || endPointer > len(fullPURBBlob) {
 		// the pointer is pointing outside the blob

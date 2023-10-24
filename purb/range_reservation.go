@@ -6,14 +6,18 @@ import (
 	"fmt"
 )
 
-// RangeReservationLayout is used to represent a []byte array with (potentially overlapping) range=byteRangeForAllowedPositionIndex reservations
+// RegionReservationStruct is used to represent a []byte array
+// with (potentially overlapping) range=byteRangeForAllowedPositionIndex reservations
 // Expose "Reset()", "Reserve(range)", and "ScanFree"
 type RegionReservationStruct struct {
-	regions          []*Region // important, those ranges are *always* sorted by startPos
-	coalescedRegions []*Region // same as "regions" but coalesced, e.g., [10-150],[100-1000] becomes [10-1000]
+	// important, those ranges are *always* sorted by startPos
+	regions []*Region
+
+	// same as "regions" but coalesced, e.g., [10-150],[100-1000] becomes [10-1000]
+	coalescedRegions []*Region
 }
 
-// NewSkipLayout creates a new RangeReservationLayout
+// NewRegionReservationStruct creates a new RegionReservationStruct
 func NewRegionReservationStruct() *RegionReservationStruct {
 	layout := new(RegionReservationStruct)
 	layout.Reset()
@@ -83,10 +87,11 @@ func (r *RegionReservationStruct) IsFree(startPos int, endPos int) bool {
 	return true
 }
 
-// Attempt to reserve a specific extent in the layout.
+// Attempt to Reserve a specific extent in the layout.
 // Region work as [startPos, endPos[
 // If requireFree is true, attempt to reserve it exclusively (return true) or fails (return false)
-// If requireFree is false, reserve byteRangeForAllowedPositionIndex even if some or all of it already reserved. (always returns true)
+// If requireFree is false, reserve byteRangeForAllowedPositionIndex
+// even if some or all of it already reserved. (always returns true)
 // Returns true if requested byteRangeForAllowedPositionIndex was reserved, false if not.
 func (r *RegionReservationStruct) Reserve(
 	startPos int,
@@ -95,7 +100,8 @@ func (r *RegionReservationStruct) Reserve(
 	label string,
 ) bool {
 
-	// easiest case: if we don't care about the byteRangeForAllowedPositionIndex being free, just add the byteRangeForAllowedPositionIndex
+	// easiest case: if we don't care about the byteRangeForAllowedPositionIndex being free,
+	// just add the byteRangeForAllowedPositionIndex
 	if !requireFree {
 		r.addThenSort(startPos, endPos, label)
 		return true
@@ -135,13 +141,14 @@ func (r *RegionReservationStruct) ScanFreeRegions(f func(int, int), maxByteOffse
 		currentOffset = region.endPos
 	}
 
-	// do not forget the byteRangeForAllowedPositionIndex between the last range (if any) and the maxByteOffset (free by definition)
+	// do not forget the byteRangeForAllowedPositionIndex between the last range (if any)
+	// and the maxByteOffset (free by definition)
 	if currentOffset < maxByteOffset {
 		f(currentOffset, maxByteOffset)
 	}
 }
 
-// ToString // thank you golang for forcing me to comment on "ToString()"
+// Thank you golang for forcing me to comment on ToString
 func (r *RegionReservationStruct) ToString() string {
 	s := ""
 	for k, region := range r.regions {
@@ -150,21 +157,21 @@ func (r *RegionReservationStruct) ToString() string {
 	return s
 }
 
-// tuple (startPos, endPos, label)
+// Region is a tuple (startPos, endPos, label)
 type Region struct {
 	startPos int
 	endPos   int
 	label    string
 }
 
-// ToString // thank you golang for forcing me to comment on "ToString()"
+// Thank you golang for forcing me to comment on ToString
 func (r *Region) ToString() string {
 	s := ""
 	s += fmt.Sprintf("%v:%v \"%v\"", r.startPos, r.endPos, r.label)
 	return s
 }
 
-// returns true iff the two regions overlap
+// DoesOverlapWith returns true if the two regions overlap
 func (r *Region) DoesOverlapWith(otherRegion *Region) bool {
 
 	// r fully before otherRegion
@@ -205,7 +212,8 @@ func coalesceRegions(regions []*Region) []*Region {
 
 		for i := range coalescedRegions {
 			if region.DoesOverlapWith(coalescedRegions[i]) {
-				// replace the byteRangeForAllowedPositionIndex already in coalescedRegions with the new merged range
+				// replace the byteRangeForAllowedPositionIndex already in coalescedRegions
+				// with the new merged range
 				coalescedRegions[i] = region.ComputeOverlap(coalescedRegions[i])
 				hasCoalesced = true
 			}
@@ -233,10 +241,12 @@ func onePassCoalesceRegions(regions []*Region) []*Region {
 			continue
 		}
 
-		// if this byteRangeForAllowedPositionIndex overlap with the previously registered byteRangeForAllowedPositionIndex, replace it with the combination
+		// if this byteRangeForAllowedPositionIndex overlap with
+		// the previously registered byteRangeForAllowedPositionIndex, replace it with the combination
 		lastElem := len(outputRegions) - 1
 		if region.DoesOverlapWith(outputRegions[lastElem]) {
-			// replace the byteRangeForAllowedPositionIndex already in coalescedRegions with the new merged range
+			// replace the byteRangeForAllowedPositionIndex already in coalescedRegions
+			// with the new merged range
 			outputRegions[lastElem] = region.ComputeOverlap(outputRegions[lastElem])
 		} else {
 			// otherwise, we cannot coalesce, just add

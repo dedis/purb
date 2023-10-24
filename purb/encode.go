@@ -19,8 +19,8 @@ func (p *Purb) Encode(
 	p.originalData = data
 
 	// creation of the global Nonce and random playload key
-	p.nonce = p.randomBytes(NONCE_LENGTH)
-	p.sessionKey = p.randomBytes(SYMMETRIC_KEY_LENGTH)
+	p.nonce = p.randomBytes(NonceLength)
+	p.sessionKey = p.randomBytes(SymmetricKeyLength)
 
 	if p.isVerbose {
 		log.Printf("Created an empty PURB, original data %v, payload key %v, nonce %v", data,
@@ -74,14 +74,16 @@ func (p *Purb) createCornerstones() {
 
 	for _, recipient := range recipients {
 
-		// now create the said cornerstone. We advance if we already have a cornerstone for this suite (LB->Kirill: can't two Recipients share the same suite?)
+		// now create the said cornerstone. We advance if we already have a cornerstone for this suite
+		// (LB->Kirill: can't two Recipients share the same suite?)
 		if header.Cornerstones[recipient.SuiteName] != nil {
 			continue
 		}
 
 		var keyPair *key.Pair
 		for {
-			// Generate a fresh SessionKey keyPair of a private SessionKey (scalar), a public SessionKey (point), and hidden encoding of the public SessionKey
+			// Generate a fresh SessionKey keyPair of a private SessionKey (scalar),
+			// a public SessionKey (point), and hidden encoding of the public SessionKey
 			keyPair = key.NewHidingKeyPair(recipient.Suite)
 
 			if keyPair.Private == nil || keyPair.Public == nil {
@@ -110,7 +112,8 @@ func (p *Purb) createCornerstones() {
 	}
 }
 
-// Compute a shared secret per entrypoint used to encrypt it. It takes a public SessionKey of a recipient and multiplies it by fresh private SessionKey for a given cipher suite.
+// Compute a shared secret per entrypoint used to encrypt it. It takes a public SessionKey
+// of a recipient and multiplies it by fresh private SessionKey for a given cipher suite.
 func (p *Purb) createEntryPoints() {
 	// create an empty entrypoint per suite, indexed per suite
 	for _, recipient := range p.recipients {
@@ -198,7 +201,8 @@ func placeCornerstonesHelper(
 		suiteInfo := cornerstone.SuiteInfo
 		allowedPositions := cornerstone.SuiteInfo.AllowedPositions
 
-		// find the first free position in the layout. We use the "secondaryLayout" since secondary positions are *not* free for other cornerstones !
+		// find the first free position in the layout. We use the "secondaryLayout"
+		// since secondary positions are *not* free for other cornerstones !
 		smallestNonConflictingIndex := -1
 
 		for index, startPos := range allowedPositions {
@@ -265,23 +269,30 @@ func placeCornerstonesHelper(
 // Writes cornerstone values to the first available entries of the ones assigned for use ciphersuites
 func (p *Purb) placeCornerstones() {
 
-	// To compute the "main layout", we use a secondary layout to keep track of things. It is discarded at the end, and only helps computing mainLayout.
+	// To compute the "main layout", we use a secondary layout to keep track of things.
+	// It is discarded at the end, and only helps computing mainLayout.
 	// Two things to remember:
 	// (1) every Suite has *multiple possible positions* for placing a cornerstone.
-	// (2) when the PURB is finalized, the decoder can XOR *all possible positions* (within the payload) to get the cornerstone
-	// In principle, when we found the primary position for a suite, we don't care what's gonna be in the remaining positions,
-	// *but* it cannot be another cornerstone since we need to ensure there is at least one degree of freedom to ensure property
-	// (2). Hence, we place cornerstone where they don't collide with other "things" in the primary payload (which is normal),
-	// but also they cannot collide with other suite's allowed positions (represented by the secondaryLayout).
-	// On the other hand, other "things" (entrypoints, data), can collide with the non-primary positions of the suites.
-	// Final note: we start by placing the "longest" (bit-wise) cornerstone since it has more chance to collide with something
-	// when placed.
+	// (2) when the PURB is finalized, the decoder can XOR *all possible positions*
+	// (within the payload) to get the cornerstone
+	// In principle, when we found the primary position for a suite,
+	// we don't care what's gonna be in the remaining positions,
+	// *but* it cannot be another cornerstone since we need to ensure
+	// there is at least one degree of freedom to ensure property
+	// (2). Hence, we place cornerstone where they don't collide
+	// with other "things" in the primary payload (which is normal),
+	// but also they cannot collide with other suite's allowed positions
+	// (represented by the secondaryLayout).
+	// On the other hand, other "things" (entrypoints, data),
+	// can collide with the non-primary positions of the suites.
+	// Final note: we start by placing the "longest" (bit-wise) cornerstone
+	// since it has more chance to collide with something when placed.
 	mainLayout := p.header.Layout
 	secondaryLayout := NewRegionReservationStruct()
 
 	// we first reserve the spot for the nonce
-	mainLayout.Reserve(0, NONCE_LENGTH, true, "nonce")
-	secondaryLayout.Reserve(0, NONCE_LENGTH, true, "nonce")
+	mainLayout.Reserve(0, NonceLength, true, "nonce")
+	secondaryLayout.Reserve(0, NonceLength, true, "nonce")
 
 	cornerstonesToPlace := make([]*Cornerstone, 0)
 	cornerstonesPlaced := make([]*Cornerstone, 0)
@@ -358,8 +369,9 @@ func (p *Purb) placeEntrypoints() {
 				}
 
 				if !positionFound {
-					//If we haven't positionFound the entrypoint, update the hash table size and initialStartPos
-					//initialStartPos = current hash table initialStartPos + number of entries in the table* the length of each entrypoint
+					// If we haven't positionFound the entrypoint, update the hash table size and initialStartPos
+					// initialStartPos = current hash table initialStartPos
+					//                   + number of entries in the table* the length of each entrypoint
 					initialStartPos += tableSize * entrypoint.Length
 					tableSize *= 2
 				}
@@ -368,7 +380,8 @@ func (p *Purb) placeEntrypoints() {
 	}
 }
 
-// placeEntrypoints will findAllRangesStrictlyBefore, place and reserve part of the header for the data. Does not use a hash table, put the points linearly
+// placeEntrypoints will findAllRangesStrictlyBefore, place and reserve part of the header for the data.
+// Does not use a hash table, put the points linearly
 func (p *Purb) placeEntrypointsSimplified() {
 
 	for _, cornerstone := range p.header.Cornerstones {
@@ -390,9 +403,8 @@ func (p *Purb) placeEntrypointsSimplified() {
 
 					//log.Printf("Placing entry at [%d-%d]", startPos, startPos+h.EntryPointLength)
 					break
-				} else {
-					startPos += entrypoint.Length
 				}
+				startPos += entrypoint.Length
 			}
 		}
 	}
@@ -429,14 +441,15 @@ func (p *Purb) encryptThenPadData(data []byte) {
 		log.Printf("Payload encrypted to %v (len %v)", encryptedData, len(encryptedData))
 	}
 
-	p.payload = pad(encryptedData, p.header.Length()+MAC_AUTHENTICATION_TAG_LENGTH)
-	// If MAC overlaps with some allowed cornerstone position, add one random byte to move to next allowed padding length
+	p.payload = pad(encryptedData, p.header.Length()+MacAuthenticationTagLength)
+	// If MAC overlaps with some allowed cornerstone position,
+	// add one random byte to move to next allowed padding length
 	for p.macOverlapsWithAllowedPositions(p.header.Length()+len(p.payload),
-		p.header.Length()+len(p.payload)+MAC_AUTHENTICATION_TAG_LENGTH) {
+		p.header.Length()+len(p.payload)+MacAuthenticationTagLength) {
 		randomByte := make([]byte, 1)
 		random.Bytes(randomByte, random.New())
 		p.payload = pad(append(p.payload, randomByte...),
-			p.header.Length()+MAC_AUTHENTICATION_TAG_LENGTH)
+			p.header.Length()+MacAuthenticationTagLength)
 	}
 	if p.isVerbose {
 		log.Printf("Encrypted payload padded from %v to %v bytes", len(encryptedData),
@@ -451,11 +464,11 @@ func (p *Purb) placePayloadAndCornerstones() {
 
 	// copy nonce
 	if len(p.nonce) != 0 {
-		region := buffer.growAndGetRegion(0, NONCE_LENGTH)
+		region := buffer.growAndGetRegion(0, NonceLength)
 		copy(region, p.nonce)
 
 		if p.isVerbose {
-			log.Printf("Adding nonce in [%v:%v], value %v, len %v", 0, NONCE_LENGTH, p.nonce,
+			log.Printf("Adding nonce in [%v:%v], value %v, len %v", 0, NonceLength, p.nonce,
 				len(p.nonce))
 		}
 	}
@@ -476,9 +489,9 @@ func (p *Purb) placePayloadAndCornerstones() {
 	}
 
 	// record payload start and payload end
-	payloadStartOffset := make([]byte, START_OFFSET_LEN)
+	payloadStartOffset := make([]byte, StartOffsetLen)
 	binary.BigEndian.PutUint32(payloadStartOffset, uint32(p.header.Length()))
-	payloadEndOffset := make([]byte, END_OFFSET_LEN)
+	payloadEndOffset := make([]byte, EndOffsetLen)
 	binary.BigEndian.PutUint32(payloadEndOffset, uint32(p.header.Length()+p.encryptedDataLen))
 
 	// encrypt and copy entrypoints
@@ -493,12 +506,10 @@ func (p *Purb) placePayloadAndCornerstones() {
 			// we use shared secret as a seed to a Stream cipher
 			entrypointKey := KDF("key", entrypoint.SharedSecret)
 			encrypted, err := aeadEncrypt(entrypointContent, p.nonce, entrypointKey, nil, p.stream)
-			for i := range encrypted {
-				region[i] = encrypted[i]
-			}
 			if err != nil {
 				log.Fatal(err.Error())
 			}
+			copy(encrypted, region)
 
 			if p.isVerbose {
 				log.Printf("Adding symmetric entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v",
@@ -554,10 +565,9 @@ func (p *Purb) placePayloadAndCornerstones() {
 				if cornerstoneAllowedPos > buffer.length() {
 					// the position is fully outside the blob; we advanceIteratorUntil this cornerstone
 					break
-				} else {
-					// the position is partially inside the blob; take only this
-					endPos = buffer.length()
 				}
+				// the position is partially inside the blob; take only this
+				endPos = buffer.length()
 			}
 			region := buffer.slice(cornerstoneAllowedPos, endPos)
 
@@ -588,7 +598,7 @@ func (p *Purb) addMAC() {
 }
 
 func getMAC(blob []byte) []byte {
-	return blob[len(blob)-MAC_AUTHENTICATION_TAG_LENGTH:]
+	return blob[len(blob)-MacAuthenticationTagLength:]
 }
 
 // ToBytes get the []byte representation of the PURB
@@ -635,7 +645,7 @@ func (si *SuiteInfo) byteRangeForAllowedPositionIndex(index int) (int, int) {
 
 // Compute the length of the header when transformed to []byte
 func (h *Header) Length() int {
-	length := NONCE_LENGTH
+	length := NonceLength
 
 	for _, entryPoints := range h.EntryPoints {
 		for _, entrypoint := range entryPoints {

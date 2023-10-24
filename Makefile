@@ -15,12 +15,12 @@ lint: tidy
 
 vet: tidy
 	# Go vet
-	@go vet ./...
+	@go vet purb/...
 
 test: tidy
 	# Test without coverage
-	@go test ./...
+	@go test purb/...
 
 coverage: tidy
 	# Test and generate a coverage output usable by sonarcloud
-	@go test -json -covermode=count -coverpkg=./... -coverprofile=profile.cov ./... | tee report.json
+	@go test -json -covermode=count -coverpkg=purb/... -coverprofile=profile.cov purb/... | tee report.json

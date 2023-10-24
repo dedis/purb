@@ -87,8 +87,8 @@ func (p *Purb) VisualRepresentation(withBoundaries bool) string {
 
 	lines = append(lines,
 		fmt.Sprintf("MAC: %+v @ offset %v (len %v)", getMAC(p.byteRepresentation),
-			len(p.byteRepresentation)-MAC_AUTHENTICATION_TAG_LENGTH,
-			MAC_AUTHENTICATION_TAG_LENGTH))
+			len(p.byteRepresentation)-MacAuthenticationTagLength,
+			MacAuthenticationTagLength))
 
 	if !withBoundaries {
 		return strings.Join(lines, "\n")
@@ -118,7 +118,7 @@ func aeadEncrypt(data, nonce, key, additional []byte, stream cipher.Stream) ([]b
 
 	// If no key is passed, generate a random 16-byte key and create a cipher from it
 	if key == nil {
-		key := make([]byte, SYMMETRIC_KEY_LENGTH)
+		key := make([]byte, SymmetricKeyLength)
 		random.Bytes(key, stream)
 	}
 	block, err := aes.NewCipher(key)

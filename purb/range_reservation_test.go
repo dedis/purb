@@ -5,6 +5,12 @@ import (
 	"testing"
 )
 
+const (
+	FreeByteRange0_10     = "0:10"
+	FreeByteRange100_150  = "100:150"
+	FreeByteRange200_1000 = "200:1000"
+)
+
 func TestInsertionSort(t *testing.T) {
 	input := []int{
 		503,
@@ -99,7 +105,7 @@ func TestRangeReservation(t *testing.T) {
 		regions = append(regions, strconv.Itoa(start)+":"+strconv.Itoa(end))
 	}
 	layout.ScanFreeRegions(scanner, endPos)
-	if regions[0] != "0:10" {
+	if regions[0] != FreeByteRange0_10 {
 		t.Error("First free byteRangeForAllowedPositionIndex should be 0:10")
 	}
 	if regions[1] != "100:1000" {
@@ -124,13 +130,13 @@ func TestRangeReservation(t *testing.T) {
 		regions = append(regions, strconv.Itoa(start)+":"+strconv.Itoa(end))
 	}
 	layout.ScanFreeRegions(scanner, endPos)
-	if regions[0] != "0:10" {
+	if regions[0] != FreeByteRange0_10 {
 		t.Error("First free byteRangeForAllowedPositionIndex should be 0:10, was", regions[0])
 	}
-	if regions[1] != "100:150" {
+	if regions[1] != FreeByteRange100_150 {
 		t.Error("Second free byteRangeForAllowedPositionIndex should be 100:150, was", regions[1])
 	}
-	if regions[2] != "200:1000" {
+	if regions[2] != FreeByteRange200_1000 {
 		t.Error("Third free byteRangeForAllowedPositionIndex should be 200:1000, was", regions[2])
 	}
 
@@ -146,10 +152,10 @@ func TestRangeReservation(t *testing.T) {
 		regions = append(regions, strconv.Itoa(start)+":"+strconv.Itoa(end))
 	}
 	layout.ScanFreeRegions(scanner, endPos)
-	if regions[0] != "0:10" {
+	if regions[0] != FreeByteRange0_10 {
 		t.Error("First free byteRangeForAllowedPositionIndex should be 0:10, was", regions[0])
 	}
-	if regions[1] != "200:1000" {
+	if regions[1] != FreeByteRange200_1000 {
 		t.Error("Second free byteRangeForAllowedPositionIndex should be 200:1000, was", regions[1])
 	}
 
