@@ -1,4 +1,4 @@
-package purbs
+package purb
 
 import (
 	"math"

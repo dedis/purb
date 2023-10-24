@@ -1,4 +1,4 @@
-package purbs
+package purb
 
 /* Code credit to Matthew Underwood, simplified by LB */
 
@@ -88,7 +88,12 @@ func (r *RegionReservationStruct) IsFree(startPos int, endPos int) bool {
 // If requireFree is true, attempt to reserve it exclusively (return true) or fails (return false)
 // If requireFree is false, reserve byteRangeForAllowedPositionIndex even if some or all of it already reserved. (always returns true)
 // Returns true if requested byteRangeForAllowedPositionIndex was reserved, false if not.
-func (r *RegionReservationStruct) Reserve(startPos int, endPos int, requireFree bool, label string) bool {
+func (r *RegionReservationStruct) Reserve(
+	startPos int,
+	endPos int,
+	requireFree bool,
+	label string,
+) bool {
 
 	// easiest case: if we don't care about the byteRangeForAllowedPositionIndex being free, just add the byteRangeForAllowedPositionIndex
 	if !requireFree {

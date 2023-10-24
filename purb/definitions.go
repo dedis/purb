@@ -1,8 +1,6 @@
-package purbs
+package purb
 
 import (
-	"crypto/cipher"
-
 	"go.dedis.ch/kyber/v3"
 	"go.dedis.ch/kyber/v3/util/key"
 )
@@ -21,32 +19,6 @@ const NONCE_LENGTH = 12
 
 // Length (in bytes) of the MAC tag in the entry point (only used with entrypoints are encrypted with AEAD)
 const MAC_AUTHENTICATION_TAG_LENGTH = 32
-
-// Structure to define the whole PURB
-type Purb struct {
-	PublicParameters *PurbPublicFixedParameters
-
-	Nonce      []byte // Nonce used in both AEAD of entrypoints and payload. The same for different entrypoints as the keys are different. It is stored in the very beginning of the purb
-	Header     *Header
-	Payload    []byte        // Payload contains already encrypted and padded plaintext
-	SessionKey []byte        // SessionKey is encapsulated and used to derive PayloadKey and MacKey
-	Recipients []Recipient   // tuple with (Suite, PublicKey, PrivateKey)
-	Stream     cipher.Stream // used to get randomness
-
-	byteRepresentation []byte // the end-to-end random-looking bit array returned by ToBytes() is computed at creation time
-
-	EncryptedDataLen int    // used to record the end of encrypted data in the entry points
-	OriginalData     []byte // kept to compare between "Payload" and this
-	IsVerbose        bool   // if true, the various operations on the data structure will print what is happening
-}
-
-// This struct's contents are *not* parameters to the PURBs. Here they vary for the simulations and the plots, but they should be fixed for all purbs
-type PurbPublicFixedParameters struct {
-	SuiteInfoMap                   SuiteInfoMap // public suite information (Allowed Positions, etc)
-	SimplifiedEntrypointsPlacement bool         // If true, does not use hash tables for entrypoints
-
-	HashTableCollisionLinearResolutionAttempts int // Number of attempts to shift entrypoint position in a hash table by +1 if the computed position is already occupied
-}
 
 // Suite defines the required functionalities for each suite from kyber
 type Suite interface {
@@ -86,7 +58,7 @@ type Cornerstone struct {
 	SuiteInfo *SuiteInfo
 }
 
-//EntryPoint holds the info required to create an entrypoint for each recipient.
+// EntryPoint holds the info required to create an entrypoint for each recipient.
 type EntryPoint struct {
 	Recipient    Recipient // Recipient whom this entrypoint is for
 	SharedSecret []byte    // Ephemeral secret derived using DH

@@ -1,4 +1,4 @@
-package purbs
+package purb
 
 import (
 	"crypto/aes"
@@ -13,35 +13,35 @@ import (
 )
 
 // Simply returns a string with the internal details of the PURB
-func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
+func (p *Purb) VisualRepresentation(withBoundaries bool) string {
 
 	lines := make([]string, 0)
 
-	verbose := purb.IsVerbose
-	purb.IsVerbose = false
-	bytes := purb.ToBytes() // we don't want this to be verbose
-	purb.IsVerbose = verbose
+	verbose := p.isVerbose
+	p.isVerbose = false
+	bytes := p.ToBytes() // we don't want this to be verbose
+	p.isVerbose = verbose
 
 	lines = append(lines, "*** PURB Details ***")
-	lines = append(lines, fmt.Sprintf("Original Data: len %v", len(purb.OriginalData)))
+	lines = append(lines, fmt.Sprintf("Original Data: len %v", len(p.originalData)))
 	lines = append(lines,
 		fmt.Sprintf("PURB: header at 0 (len %v), payload at %v (len %v), total %v bytes",
-			purb.Header.Length(), purb.Header.Length(), len(purb.Payload), len(bytes)))
+			p.header.Length(), p.header.Length(), len(p.payload), len(bytes)))
 
-	lines = append(lines, fmt.Sprintf("Nonce: %+v (len %v)", purb.Nonce, len(purb.Nonce)))
+	lines = append(lines, fmt.Sprintf("Nonce: %+v (len %v)", p.nonce, len(p.nonce)))
 
-	for _, cornerstone := range purb.Header.Cornerstones {
+	for _, cornerstone := range p.header.Cornerstones {
 		lines = append(lines,
 			fmt.Sprintf("Cornerstones: %+v @ offset %v (len %v)", cornerstone.SuiteName,
 				cornerstone.Offset,
-				purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].CornerstoneLength))
+				p.config.suiteInfoMap[cornerstone.SuiteName].CornerstoneLength))
 
 		lines = append(lines, fmt.Sprintf("  Value: %v", cornerstone.Bytes))
 		lines = append(lines, fmt.Sprintf("  Allowed positions for this suite: %v",
-			purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].AllowedPositions))
+			p.config.suiteInfoMap[cornerstone.SuiteName].AllowedPositions))
 
 		cornerstoneStartPosUsed := make([]int, 0)
-		for _, startPos := range purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].AllowedPositions {
+		for _, startPos := range p.config.suiteInfoMap[cornerstone.SuiteName].AllowedPositions {
 			if startPos < len(bytes) {
 				cornerstoneStartPosUsed = append(cornerstoneStartPosUsed, startPos)
 			}
@@ -50,7 +50,7 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 		cornerstoneRangesUsed := make([]string, 0)
 		cornerstoneRangesValues := make([][]byte, 0)
 		for _, startPos := range cornerstoneStartPosUsed {
-			endPos := startPos + purb.PublicParameters.SuiteInfoMap[cornerstone.SuiteName].CornerstoneLength
+			endPos := startPos + p.config.suiteInfoMap[cornerstone.SuiteName].CornerstoneLength
 			if endPos > len(bytes) {
 				endPos = len(bytes)
 			}
@@ -74,7 +74,7 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 		lines = append(lines, fmt.Sprintf("  Recomputed value: %v", xor))
 
 	}
-	for suiteName, entrypoints := range purb.Header.EntryPoints {
+	for suiteName, entrypoints := range p.header.EntryPoints {
 		lines = append(lines, fmt.Sprintf("Entrypoints for suite %v", suiteName))
 		for index, entrypoint := range entrypoints {
 			lines = append(lines, fmt.Sprintf("  Entrypoints [%v]: %+v @ offset %v (len %v)", index,
@@ -82,12 +82,12 @@ func (purb *Purb) VisualRepresentation(withBoundaries bool) string {
 		}
 	}
 	lines = append(lines,
-		fmt.Sprintf("Padded Payload: %+v @ offset %v (len %v)", purb.Payload, purb.Header.Length(),
-			len(purb.Payload)))
+		fmt.Sprintf("Padded Payload: %+v @ offset %v (len %v)", p.payload, p.header.Length(),
+			len(p.payload)))
 
 	lines = append(lines,
-		fmt.Sprintf("MAC: %+v @ offset %v (len %v)", getMAC(purb.byteRepresentation),
-			len(purb.byteRepresentation)-MAC_AUTHENTICATION_TAG_LENGTH,
+		fmt.Sprintf("MAC: %+v @ offset %v (len %v)", getMAC(p.byteRepresentation),
+			len(p.byteRepresentation)-MAC_AUTHENTICATION_TAG_LENGTH,
 			MAC_AUTHENTICATION_TAG_LENGTH))
 
 	if !withBoundaries {

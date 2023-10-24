@@ -1,4 +1,4 @@
-package purbs
+package purb
 
 // A simple []byte slice with helpful wrapper
 type GrowableBuffer struct {

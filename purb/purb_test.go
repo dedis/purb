@@ -1,4 +1,4 @@
-package purbs
+package purb
 
 import (
 	"log"
@@ -12,41 +12,39 @@ import (
 )
 
 func TestGenCornerstones(t *testing.T) {
-	si := getDummySuiteInfo(3)
-	publicFixedParams := NewPublicFixedParameters(si, false)
-	purb := &Purb{
-		Nonce:      nil,
-		Header:     nil,
-		Payload:    nil,
-		SessionKey: nil,
+	infoMap := getDummySuiteInfo(3)
+	purb := NewPurb(
+		infoMap,
+		false,
+		random.New(),
+		true,
+	)
 
-		IsVerbose:        true,
-		Recipients:       nil,
-		Stream:           random.New(),
-		PublicParameters: publicFixedParams,
-	}
-
-	purb.Recipients = createRecipients(6, 1, purb.PublicParameters.SuiteInfoMap)
-
-	purb.Header = newEmptyHeader()
+	purb.recipients = createRecipients(6, 1, infoMap)
+	purb.header = newEmptyHeader()
 
 	purb.createCornerstones()
 
-	for _, stone := range purb.Header.Cornerstones {
-		require.Equal(t, stone.KeyPair.Hiding.HideLen(), si[stone.SuiteName].CornerstoneLength)
+	for _, stone := range purb.header.Cornerstones {
+		require.Equal(t, stone.KeyPair.Hiding.HideLen(), infoMap[stone.SuiteName].CornerstoneLength)
 		require.NotEqual(t, stone.KeyPair.Private, nil)
 		require.NotEqual(t, stone.KeyPair.Public, nil)
 	}
 }
 
 func TestPurbCreation(t *testing.T) {
-
 	data := []byte("SomeInfo")
-	infoMap := getDummySuiteInfo(2)
-	recipients := createRecipients(1, 1, infoMap)
 
-	publicFixedParams := NewPublicFixedParameters(infoMap, false)
-	purb, err := Encode(data, recipients, random.New(), publicFixedParams, true)
+	infoMap := getDummySuiteInfo(2)
+	purb := NewPurb(
+		infoMap,
+		false,
+		random.New(),
+		true,
+	)
+
+	purb.recipients = createRecipients(1, 1, infoMap)
+	err := purb.Encode(data)
 
 	if err != nil {
 		t.Error(err)
@@ -56,11 +54,6 @@ func TestPurbCreation(t *testing.T) {
 }
 
 func TestEncodeDecode(t *testing.T) {
-
-	simplified := false
-	verbose := false
-	stream := random.New()
-
 	maxSuites := 10
 	maxRecipients := 10
 
@@ -73,15 +66,19 @@ func TestEncodeDecode(t *testing.T) {
 
 	for nSuites := 1; nSuites < maxSuites; nSuites++ {
 		for nRecipients := 1; nRecipients < maxRecipients; nRecipients++ {
-
 			log.Println("Testing for", nSuites, "suites and", nRecipients, "Recipients")
 			suitesInfo := getDummySuiteInfo(nSuites)
-			publicFixedParams := NewPublicFixedParameters(suitesInfo, simplified)
-
-			recipients := createRecipients(nRecipients, nSuites, suitesInfo)
 
 			// try encode
-			purb, err := Encode(data, recipients, stream, publicFixedParams, verbose)
+			purb := NewPurb(
+				suitesInfo,
+				false,
+				random.New(),
+				false,
+			)
+
+			purb.recipients = createRecipients(nRecipients, nSuites, suitesInfo)
+			err := purb.Encode(data)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -95,7 +92,7 @@ func TestEncodeDecode(t *testing.T) {
 			// try decode
 			for recipientsID := 0; recipientsID < nRecipients; recipientsID++ {
 				log.Println("Decrypting for recipient", recipientsID)
-				success, message, err := Decode(blob, &recipients[0], publicFixedParams, verbose)
+				success, message, err := purb.Decode(blob)
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -108,10 +105,6 @@ func TestEncodeDecode(t *testing.T) {
 }
 
 func TestEncodeDecodeSimplified(t *testing.T) {
-	simplified := true
-	verbose := false
-	stream := random.New()
-
 	maxSuites := 10
 	maxRecipients := 10
 
@@ -127,12 +120,17 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 
 			log.Println("Testing for", nSuites, "suites and", nRecipients, "Recipients")
 			suitesInfo := getDummySuiteInfo(nSuites)
-			publicFixedParams := NewPublicFixedParameters(suitesInfo, simplified)
-
-			recipients := createRecipients(nRecipients, nSuites, suitesInfo)
 
 			// try encode
-			purb, err := Encode(data, recipients, stream, publicFixedParams, verbose)
+			purb := NewPurb(
+				suitesInfo,
+				true,
+				random.New(),
+				false,
+			)
+
+			purb.recipients = createRecipients(nRecipients, nSuites, suitesInfo)
+			err := purb.Encode(data)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -146,7 +144,8 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 			// try decode
 			for recipientsID := 0; recipientsID < nRecipients; recipientsID++ {
 				log.Println("Decrypting for recipient", recipientsID)
-				success, message, err := Decode(blob, &recipients[0], publicFixedParams, verbose)
+
+				success, message, err := purb.Decode(blob)
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -160,20 +159,28 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 
 func TestMacCornerstoneOverlap(t *testing.T) {
 	data := []byte("SomeInfo")
-	infoMap := getDummySuiteInfoWithMultipleSuitePositions()
-	recipients := createRecipients(1, 1, infoMap)
+	suitesInfo := getDummySuiteInfoWithMultipleSuitePositions()
+	recipients := createRecipients(1, 1, suitesInfo)
 
 	log.Println("Testing the resolution of a MAC and a cornerstone position overlap")
-	publicFixedParams := NewPublicFixedParameters(infoMap, false)
 
-	purb, err := Encode(data, recipients, random.New(), publicFixedParams, true)
+	purb := NewPurb(
+		suitesInfo,
+		false,
+		random.New(),
+		true,
+	)
+
+	purb.recipients = recipients
+
+	err := purb.Encode(data)
 	if err != nil {
 		t.Error(err)
 	}
 	blob := purb.ToBytes()
 
 	// try decode
-	success, message, err := Decode(blob, &recipients[0], publicFixedParams, true)
+	success, message, err := purb.Decode(blob)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -203,7 +210,10 @@ func getDummySuiteInfo(N int) SuiteInfoMap {
 	}
 	for i := 0; i < N; i++ {
 		info[curve25519.NewBlakeSHA256Curve25519(true).String()+suffixes[i]] = &SuiteInfo{
-			AllowedPositions: positions[i], CornerstoneLength: cornerstoneLen, EntryPointLength: entryPointLen}
+			AllowedPositions:  positions[i],
+			CornerstoneLength: cornerstoneLen,
+			EntryPointLength:  entryPointLen,
+		}
 	}
 
 	return info
@@ -219,7 +229,10 @@ func getDummySuiteInfoWithMultipleSuitePositions() SuiteInfoMap {
 	positions := []int{0, 2 * cornerstoneLen, 3 * cornerstoneLen, 5 * cornerstoneLen}
 
 	info[curve25519.NewBlakeSHA256Curve25519(true).String()] = &SuiteInfo{
-		AllowedPositions: positions, CornerstoneLength: cornerstoneLen, EntryPointLength: entryPointLen}
+		AllowedPositions:  positions,
+		CornerstoneLength: cornerstoneLen,
+		EntryPointLength:  entryPointLen,
+	}
 
 	return info
 }
@@ -240,7 +253,12 @@ func createRecipients(n int, numberOfSuites int, si SuiteInfoMap) []Recipient {
 	for i := 0; i < n; i++ {
 		for _, suite := range suites {
 			pair := key.NewHidingKeyPair(suite.Value)
-			decs = append(decs, Recipient{SuiteName: suite.Name, Suite: suite.Value, PublicKey: pair.Public, PrivateKey: pair.Private})
+			decs = append(decs, Recipient{
+				SuiteName:  suite.Name,
+				Suite:      suite.Value,
+				PublicKey:  pair.Public,
+				PrivateKey: pair.Private,
+			})
 		}
 	}
 	return decs
