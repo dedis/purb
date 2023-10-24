@@ -1,7 +1,0 @@
-language: go
-
-go:
-- 1.13.x
-
-# The default for Travis, language Go, is if makefile exists, then run "make",
-# which is good enough for us.
