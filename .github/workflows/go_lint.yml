@@ -29,7 +29,6 @@ jobs:
       with:
         # documentation: https://github.com/golangci/golangci-lint-action#readme
         version: latest
-        working-directory: server
         install-mode: "binary"
 
     - name: Lint
