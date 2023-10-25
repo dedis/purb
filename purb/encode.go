@@ -509,7 +509,7 @@ func (p *Purb) placePayloadAndCornerstones() {
 			if err != nil {
 				log.Fatal(err.Error())
 			}
-			copy(encrypted, region)
+			copy(region, encrypted)
 
 			if p.isVerbose {
 				log.Printf("Adding symmetric entrypoint in [%v:%v], plaintext value %v, encrypted value %v with key %v, len %v",
