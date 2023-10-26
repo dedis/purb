@@ -9,16 +9,16 @@ import (
 )
 
 type Purb interface {
-	Decode(
-		blob []byte,
-	) (bool, []byte, error)
+	// Encode a PURB blob from some data and recipients information
+	Encode(data []byte) error
 
-	Encode(
-		data []byte,
-	) error
-
+	// ToBytes get the []byte representation of the encoded PURB blob
 	ToBytes() []byte
 
+	// Decode takes a PURB blob and a recipient information (suite+KeyPair) and extracts the payload
+	Decode(blob []byte) (bool, []byte, error)
+
+	// VisualRepresentation returns a string with the internal details of the PURB blob
 	VisualRepresentation() string
 }
 
