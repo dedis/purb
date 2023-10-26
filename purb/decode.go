@@ -139,7 +139,7 @@ func entrypointTrialDecode(
 
 		if entrypointEndPos > len(data) {
 			// we're outside the hash table (even outside the blob!), so we should have decoded the entrypoint before
-			return false, nil, errors.New("no entrypoint was correctly decrypted")
+			return false, nil, errors.New("no entrypoint was correctly decrypted in normal mode")
 		}
 	}
 }
@@ -176,7 +176,7 @@ func entrypointTrialDecodeSimplified(
 		}
 	}
 
-	return false, nil, errors.New("no entrypoint was correctly decrypted")
+	return false, nil, errors.New("no entrypoint was correctly decrypted in simplified mode")
 }
 
 // verifies the authentication tag of a PURB
