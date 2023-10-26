@@ -17,10 +17,7 @@ func (p *Purb) VisualRepresentation(withBoundaries bool) string {
 
 	lines := make([]string, 0)
 
-	verbose := p.isVerbose
-	p.isVerbose = false
-	bytes := p.ToBytes() // we don't want this to be verbose
-	p.isVerbose = verbose
+	bytes := p.ToBytes()
 
 	lines = append(lines, "*** PURB Details ***")
 	lines = append(lines, fmt.Sprintf("Original Data: len %v", len(p.originalData)))

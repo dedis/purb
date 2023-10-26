@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
-	"purb"
+	"purb/purb"
 
 	"go.dedis.ch/kyber/v3/group/curve25519"
 	"go.dedis.ch/kyber/v3/util/key"
@@ -14,13 +14,11 @@ func main() {
 	// this is public and fixed across all purbs
 	suitesInfo := getDummySuiteInfo()
 	simplified := false // when "true", does not use hash tables (but linear mapping)
-	verbose := false
 
 	p := purb.NewPurb(
 		suitesInfo,
 		simplified,
 		random.New(),
-		verbose,
 	)
 
 	msg := "And presently I was driving through the drizzle of the dying day, with the windshield wipers in full action but unable to cope with my tears."
@@ -30,7 +28,7 @@ func main() {
 	fmt.Println()
 
 	// Encode (this sets-up many things, but does not output []bytes)
-	p.recipients = createRecipients(1)
+	p.Recipients = createRecipients(1)
 	err := p.Encode([]byte(msg))
 	if err != nil {
 		panic(err.Error())

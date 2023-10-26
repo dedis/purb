@@ -33,7 +33,7 @@ type Purb struct {
 	sessionKey []byte
 
 	// tuple with (Suite, PublicKey, PrivateKey)
-	recipients []Recipient
+	Recipients []Recipient
 
 	// used to get randomness
 	stream cipher.Stream
@@ -46,9 +46,6 @@ type Purb struct {
 
 	// kept to compare between payload and originalData
 	originalData []byte
-
-	// if true, the various operations on the data structure will print what is happening
-	isVerbose bool
 }
 
 // Creates a new PURB struct with the given parameters
@@ -56,7 +53,6 @@ func NewPurb(
 	infoMap SuiteInfoMap,
 	simplifiedEntryPointTable bool,
 	stream cipher.Stream,
-	isVerbose bool,
 ) *Purb {
 	// Creates a struct with parameters that are *fixed* across all PURBs. Should be constants,
 	// but here it is a variable for simulating various parameters
@@ -73,6 +69,5 @@ func NewPurb(
 		payload:    nil,
 		sessionKey: nil,
 		stream:     stream,
-		isVerbose:  isVerbose,
 	}
 }

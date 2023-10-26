@@ -17,10 +17,9 @@ func TestGenCornerstones(t *testing.T) {
 		infoMap,
 		false,
 		random.New(),
-		true,
 	)
 
-	purb.recipients = createRecipients(6, 1, infoMap)
+	purb.Recipients = createRecipients(6, 1, infoMap)
 	purb.header = newEmptyHeader()
 
 	purb.createCornerstones()
@@ -40,10 +39,9 @@ func TestPurbCreation(t *testing.T) {
 		infoMap,
 		false,
 		random.New(),
-		true,
 	)
 
-	purb.recipients = createRecipients(1, 1, infoMap)
+	purb.Recipients = createRecipients(1, 1, infoMap)
 	err := purb.Encode(data)
 
 	if err != nil {
@@ -74,10 +72,9 @@ func TestEncodeDecode(t *testing.T) {
 				suitesInfo,
 				false,
 				random.New(),
-				false,
 			)
 
-			purb.recipients = createRecipients(nRecipients, nSuites, suitesInfo)
+			purb.Recipients = createRecipients(nRecipients, nSuites, suitesInfo)
 			err := purb.Encode(data)
 			if err != nil {
 				log.Fatal(err)
@@ -126,10 +123,9 @@ func TestEncodeDecodeSimplified(t *testing.T) {
 				suitesInfo,
 				true,
 				random.New(),
-				false,
 			)
 
-			purb.recipients = createRecipients(nRecipients, nSuites, suitesInfo)
+			purb.Recipients = createRecipients(nRecipients, nSuites, suitesInfo)
 			err := purb.Encode(data)
 			if err != nil {
 				log.Fatal(err)
@@ -168,10 +164,9 @@ func TestMacCornerstoneOverlap(t *testing.T) {
 		suitesInfo,
 		false,
 		random.New(),
-		true,
 	)
 
-	purb.recipients = recipients
+	purb.Recipients = recipients
 
 	err := purb.Encode(data)
 	if err != nil {
