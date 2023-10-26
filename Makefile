@@ -1,30 +1,25 @@
-.PHONY: install example demo test simul padme-figures clean install-experiments
+.PHONY: all tidy lint vet test coverage
 
-install:
-	go get -u -tags=vartime -v ./...
+# Default "make" target to check locally that everything is ok, BEFORE pushing remotely
+all: lint vet test
+	@echo "Done with the standard checks"
 
-demo: example
-example:
-	go run -tags=vartime example/example.go
+tidy:
+	go mod tidy
 
-test:
-	$(MAKE) -C purbs test
+# Some packages are excluded from staticcheck due to deprecated warnings: #208.
+lint: tidy
+	golangci-lint run
 
-lint:
-	$(MAKE) -C purbs lint
+vet: tidy
+	go vet purb/...
 
-clean:
-	rm -f simul_*.txt
+test: tidy
+	# Test without coverage
+	LLVL=""
+	go test purb/...
 
-all: install test example
-
-# only needed for experiments
-
-install-experiments:
-	pip install -r requirements.txt
-
-simul: install-experiments
-	$(MAKE) -C experiments-encoding simul
-
-padme-figures: install-experiments
-	$(MAKE) -C experiments-padding all
+coverage: tidy
+	# Test and generate a coverage output usable by sonarcloud
+	LLVL=""
+	go test -json -covermode=count -coverpkg=purb/... -coverprofile=profile.cov purb/... | tee report.json
